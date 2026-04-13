@@ -1,0 +1,25 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Data volumes (managed by Docker)
+data/neo4j/
+data/victoriametrics/
+data/qdrant/
+
+# OS
+.DS_Store
+Thumbs.db

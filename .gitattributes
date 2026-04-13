@@ -1,0 +1,28 @@
+# Force LF line endings for all text files (prevents CRLF in containers)
+* text=auto eol=lf
+
+# Explicitly LF for scripts and source code
+*.py eol=lf
+*.sh eol=lf
+*.js eol=lf
+*.jsx eol=lf
+*.ts eol=lf
+*.tsx eol=lf
+*.json eol=lf
+*.yml eol=lf
+*.yaml eol=lf
+*.tf eol=lf
+*.md eol=lf
+*.css eol=lf
+*.html eol=lf
+*.conf eol=lf
+*.env eol=lf
+Dockerfile eol=lf
+.gitignore eol=lf
+
+# Binary files — never convert
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.woff binary

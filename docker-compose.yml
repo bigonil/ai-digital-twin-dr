@@ -1,0 +1,223 @@
+version: "3.9"
+
+networks:
+  dt-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_plugins:
+  victoriametrics_data:
+  qdrant_data:
+
+services:
+
+  # ─────────────────────────────────────────────
+  # GRAPH DATABASE
+  # ─────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5.18-community
+    container_name: dt-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # Browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: "${NEO4J_USER}/${NEO4J_PASSWORD}"
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_memory_heap_initial__size: "4g"
+      NEO4J_dbms_memory_heap_max__size: "12g"
+      NEO4J_dbms_memory_pagecache_size: "4g"
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,gds.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*,gds.*"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_plugins:/plugins
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.10
+    deploy:
+      resources:
+        limits:
+          memory: 16g
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7474"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ─────────────────────────────────────────────
+  # TIME-SERIES DATABASE
+  # ─────────────────────────────────────────────
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.101.0
+    container_name: dt-victoriametrics
+    restart: unless-stopped
+    ports:
+      - "8428:8428"
+    command:
+      - "--storageDataPath=/storage"
+      - "--retentionPeriod=12"
+      - "--memory.allowedPercent=80"
+      - "--httpListenAddr=:8428"
+    volumes:
+      - victoriametrics_data:/storage
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.11
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8428/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ─────────────────────────────────────────────
+  # VECTOR DATABASE
+  # ─────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: dt-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST
+      - "6334:6334"   # gRPC
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__LOG_LEVEL: "INFO"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.12
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ─────────────────────────────────────────────
+  # METRICS SCRAPER (Prometheus-compatible agent)
+  # ─────────────────────────────────────────────
+  vmagent:
+    image: victoriametrics/vmagent:v1.101.0
+    container_name: dt-vmagent
+    restart: unless-stopped
+    ports:
+      - "8429:8429"
+    command:
+      - "--promscrape.config=/config/scrape.yml"
+      - "--remoteWrite.url=http://victoriametrics:8428/api/v1/write"
+      - "--httpListenAddr=:8429"
+    volumes:
+      - ./config/scrape.yml:/config/scrape.yml:ro
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.13
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    depends_on:
+      victoriametrics:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────
+  # FASTAPI BACKEND + MCP SERVER
+  # ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: dt-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"   # FastAPI / REST
+      - "9000:9000"   # MCP Server
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_USER: "${NEO4J_USER}"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
+      VICTORIAMETRICS_URL: "http://victoriametrics:8428"
+      QDRANT_URL: "http://qdrant:6333"
+      # Ollama runs on host machine; Linux requires host-gateway mapping
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+      OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL}"
+      OLLAMA_LLM_MODEL: "${OLLAMA_LLM_MODEL}"
+      LOG_LEVEL: "${LOG_LEVEL}"
+      DR_RTO_THRESHOLD_MINUTES: "${DR_RTO_THRESHOLD_MINUTES}"
+      DR_RPO_THRESHOLD_MINUTES: "${DR_RPO_THRESHOLD_MINUTES}"
+    extra_hosts:
+      # Required on native Linux Docker to reach host machine's Ollama
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app
+      - ./data:/data:ro
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.20
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─────────────────────────────────────────────
+  # REACT FRONTEND
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: dt-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: "${VITE_API_URL}"
+      VITE_WS_URL: "${VITE_WS_URL}"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.30
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    depends_on:
+      backend:
+        condition: service_healthy
