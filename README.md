@@ -62,16 +62,17 @@
 | `vmagent`        | victoriametrics/vmagent:v1.101.0           | 8429           | Prometheus scrape agent          |
 | Ollama           | _Host process_ (not Docker)                | **11434**      | LLM embedding model              |
 
-### Memory Allocation (96 GB target)
+### Memory Allocation (16 GB target)
 
-| Service          | Limit  |
-|------------------|--------|
-| neo4j            | 16 GB  |
-| victoriametrics  | 8 GB   |
-| qdrant           | 8 GB   |
-| backend          | 4 GB   |
-| frontend         | 1 GB   |
-| vmagent          | 512 MB |
+| Service          | Limit   |
+|------------------|---------|
+| neo4j            | 3 GB    |
+| victoriametrics  | 768 MB  |
+| qdrant           | 1.5 GB  |
+| backend          | 1 GB    |
+| frontend         | 512 MB  |
+| vmagent          | 256 MB  |
+| **Total**        | **~7 GB** |
 
 ---
 

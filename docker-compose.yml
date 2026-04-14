@@ -29,9 +29,9 @@ services:
     environment:
       NEO4J_AUTH: "${NEO4J_USER}/${NEO4J_PASSWORD}"
       NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
-      NEO4J_dbms_memory_heap_initial__size: "4g"
-      NEO4J_dbms_memory_heap_max__size: "12g"
-      NEO4J_dbms_memory_pagecache_size: "4g"
+      NEO4J_dbms_memory_heap_initial__size: "512m"
+      NEO4J_dbms_memory_heap_max__size: "2g"
+      NEO4J_dbms_memory_pagecache_size: "512m"
       NEO4J_apoc_export_file_enabled: "true"
       NEO4J_apoc_import_file_enabled: "true"
       NEO4J_apoc_import_file_use__neo4j__config: "true"
@@ -47,7 +47,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 16g
+          memory: 3g
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7474"]
       interval: 15s
@@ -77,7 +77,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8g
+          memory: 768m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8428/-/healthy"]
       interval: 10s
@@ -106,7 +106,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8g
+          memory: 1536m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
       interval: 10s
@@ -135,7 +135,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 256m
     depends_on:
       victoriametrics:
         condition: service_healthy
@@ -178,7 +178,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4g
+          memory: 1g
     depends_on:
       neo4j:
         condition: service_healthy
@@ -217,7 +217,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 512m
     depends_on:
       backend:
         condition: service_healthy
