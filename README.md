@@ -12,7 +12,7 @@
 │                         AI Digital Twin Platform                            │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                     React Frontend  (:3000)                          │   │
+│  │                     React Frontend  (:3001)                          │   │
 │  │   ┌──────────────────┐  ┌─────────────────┐  ┌──────────────────┐   │   │
 │  │   │  3D Force Graph  │  │ Disaster Panel  │  │  Metrics Sidebar │   │   │
 │  │   │  (Neo4j topology)│  │ (Blast Radius)  │  │  (VictoriaMetrics│   │   │
@@ -20,7 +20,7 @@
 │  └────────────┼────────────────────┼────────────────────┼─────────────┘   │
 │               │        REST API / WebSocket               │                 │
 │  ┌────────────▼──────────────────────────────────────────▼─────────────┐   │
-│  │                FastAPI Backend  (:8000) + MCP Server (:9000)         │   │
+│  │                FastAPI Backend  (:8001) + MCP Server (:9001)         │   │
 │  │   ┌─────────────────────────────────────────────────────────────┐   │   │
 │  │   │                     Parsers (4 Phases)                      │   │   │
 │  │   │  Phase 1: Terraform HCL → Neo4j graph                       │   │   │
@@ -54,8 +54,8 @@
 
 | Service          | Image                                      | Port(s)        | Purpose                          |
 |------------------|--------------------------------------------|----------------|----------------------------------|
-| `frontend`       | node:20-alpine (Vite → Nginx)              | **3000**       | React 3D dashboard               |
-| `backend`        | python:3.12-slim (FastAPI + MCP)           | **8000**, 9000 | REST API + MCP server            |
+| `frontend`       | node:20-alpine (Vite → Nginx)              | **3001**       | React 3D dashboard               |
+| `backend`        | python:3.12-slim (FastAPI + MCP)           | **8001**, 9001 | REST API + MCP server            |
 | `neo4j`          | neo4j:5.18-community                       | **7474**, 7687 | Graph DB — infra topology        |
 | `victoriametrics`| victoriametrics/victoria-metrics:v1.101.0 | **8428**       | Time-series metrics              |
 | `qdrant`         | qdrant/qdrant:v1.9.2                       | **6333**, 6334 | Vector DB — semantic search      |
@@ -160,12 +160,12 @@ bash scripts/ingest.sh
 **Manual (curl):**
 ```bash
 # Ingest Terraform files → Neo4j graph
-curl -X POST http://localhost:8000/api/parse/terraform \
+curl -X POST http://localhost:8001/api/parse/terraform \
   -H "Content-Type: application/json" \
   -d '{"path": "/data/terraform/sample"}'
 
 # Ingest architecture docs → Qdrant vectors
-curl -X POST http://localhost:8000/api/parse/docs \
+curl -X POST http://localhost:8001/api/parse/docs \
   -H "Content-Type: application/json" \
   -d '{"path": "/data/docs"}'
 ```
@@ -176,13 +176,13 @@ curl -X POST http://localhost:8000/api/parse/docs \
 
 | Service              | URL                                            | Credentials            |
 |----------------------|------------------------------------------------|------------------------|
-| **Dashboard**        | http://localhost:3000                          | —                      |
-| **FastAPI docs**     | http://localhost:8000/docs                     | —                      |
-| **FastAPI health**   | http://localhost:8000/health                   | —                      |
+| **Dashboard**        | http://localhost:3001                          | —                      |
+| **FastAPI docs**     | http://localhost:8001/docs                     | —                      |
+| **FastAPI health**   | http://localhost:8001/health                   | —                      |
 | **Neo4j Browser**    | http://localhost:7474                          | neo4j / changeme_neo4j |
 | **VictoriaMetrics**  | http://localhost:8428                          | —                      |
 | **Qdrant UI**        | http://localhost:6333/dashboard                | —                      |
-| **MCP Server**       | stdio on port 9000                             | —                      |
+| **MCP Server**       | stdio on port 9001                             | —                      |
 
 ---
 
@@ -293,7 +293,7 @@ Copy `.env.example` to `.env` and adjust as needed:
 | `QDRANT_HOST` | `qdrant` | Qdrant service hostname |
 | `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Ollama on host machine |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model name |
-| `VITE_API_URL` | `http://localhost:8000` | API URL for browser → backend calls |
+| `VITE_API_URL` | `http://localhost:8001` | API URL for browser → backend calls |
 | `DR_RTO_SECONDS` | `300` | Recovery Time Objective threshold |
 | `DR_RPO_SECONDS` | `60` | Recovery Point Objective threshold |
 
@@ -306,7 +306,7 @@ Copy `.env.example` to `.env` and adjust as needed:
 docker compose ps
 
 # Backend API
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 
 # Neo4j
 curl http://localhost:7474
@@ -317,6 +317,21 @@ curl http://localhost:8428/health
 # Qdrant
 curl http://localhost:6333/healthz
 ```
+
+---
+
+## ⚠️ Known Issues — Port Conflicts (Windows)
+
+On Windows with **Docker Desktop** and **Zscaler ZSATunnel**, the default ports clash:
+
+| Default Port | Conflict                          | Remapped Host Port |
+|--------------|-----------------------------------|--------------------|
+| 3000         | `com.docker.backend` / `wslrelay` | **3001**           |
+| 8000         | `com.docker.backend`              | **8001**           |
+| 9000         | Zscaler ZSATunnel                 | **9001**           |
+
+The `docker-compose.yml` already uses the remapped ports above.  
+All internal container-to-container communication is unaffected (uses original ports inside the Docker network).
 
 ---
 
