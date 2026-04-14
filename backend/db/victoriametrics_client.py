@@ -1,8 +1,12 @@
 """VictoriaMetrics async HTTP client (PromQL instant & range queries)."""
+import re
 import structlog
 import httpx
 
 log = structlog.get_logger()
+
+# Valid node-id pattern: alphanumeric, underscores, hyphens, dots
+_NODE_ID_RE = re.compile(r"^[\w\-\.]+$")
 
 
 class VictoriaMetricsClient:
@@ -27,6 +31,8 @@ class VictoriaMetricsClient:
 
     async def get_node_health(self, node_id: str) -> dict:
         """Aggregate health signals for a single node."""
+        if not _NODE_ID_RE.match(node_id):
+            raise ValueError(f"Invalid node_id format: {node_id!r}")
         cpu = await self._safe_scalar(f'node_cpu_usage_percent{{node_id="{node_id}"}}')
         mem = await self._safe_scalar(f'node_memory_usage_percent{{node_id="{node_id}"}}')
         lag = await self._safe_scalar(f'replication_lag_seconds{{node_id="{node_id}"}}')

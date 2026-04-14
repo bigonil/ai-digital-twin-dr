@@ -1,5 +1,5 @@
 """Graph topology API endpoints."""
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from models.graph import InfraEdge, InfraGraph, InfraNode
 
@@ -34,4 +34,6 @@ async def get_node(node_id: str, request: Request):
         "n.rto_minutes AS rto_minutes, n.rpo_minutes AS rpo_minutes, labels(n) AS labels",
         {"id": node_id},
     )
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     return InfraNode(**rows[0])

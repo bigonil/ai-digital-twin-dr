@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "dt_secret_2024"
+    neo4j_password: str
 
     victoriametrics_url: str = "http://victoriametrics:8428"
 

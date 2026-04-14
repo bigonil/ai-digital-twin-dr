@@ -1,10 +1,19 @@
 """Neo4j async driver wrapper."""
+import re
 from typing import Any
 
 import structlog
 from neo4j import AsyncGraphDatabase
 
 log = structlog.get_logger()
+
+# Whitelist of allowed relationship types to prevent Cypher injection
+_ALLOWED_REL_TYPES: frozenset[str] = frozenset(
+    {"DEPENDS_ON", "INTERACTS_WITH", "DOCUMENTED_BY", "STORES_IN", "READS_FROM", "WRITES_TO", "DEPLOYED_ON"}
+)
+
+# Valid node-id pattern: alphanumeric, underscores, hyphens, dots (no special chars)
+_NODE_ID_RE = re.compile(r"^[\w\-\.]+$")
 
 CONSTRAINTS = [
     "CREATE CONSTRAINT infra_node_id IF NOT EXISTS FOR (n:InfraNode) REQUIRE n.id IS UNIQUE",
@@ -59,6 +68,8 @@ class Neo4jClient:
         await self.run(query, {"id": node["id"], "props": props})
 
     async def merge_edge(self, source: str, target: str, rel_type: str, props: dict | None = None) -> None:
+        if rel_type not in _ALLOWED_REL_TYPES:
+            raise ValueError(f"Disallowed relationship type: {rel_type!r}. Must be one of {sorted(_ALLOWED_REL_TYPES)}")
         query = f"""
         MATCH (a {{id: $source}}), (b {{id: $target}})
         MERGE (a)-[r:{rel_type}]->(b)
@@ -79,8 +90,9 @@ class Neo4jClient:
         return {"nodes": nodes, "edges": edges}
 
     async def simulate_disaster(self, node_id: str, depth: int = 5) -> list[dict]:
-        query = """
-        MATCH path = (origin {id: $node_id})-[*1..$depth]->(affected)
+        depth = max(1, min(depth, 10))  # clamp to safe range
+        query = f"""
+        MATCH path = (origin {{id: $node_id}})-[*1..{depth}]->(affected)
         WHERE origin <> affected
         WITH affected, MIN(length(path)) AS dist
         RETURN affected.id AS id, affected.name AS name, affected.type AS type,
@@ -88,4 +100,4 @@ class Neo4jClient:
                dist AS distance
         ORDER BY dist
         """
-        return await self.run(query, {"node_id": node_id, "depth": depth})
+        return await self.run(query, {"node_id": node_id})
