@@ -78,7 +78,7 @@ services:
         limits:
           memory: 768m
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8428/-/healthy"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8428/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -107,7 +107,7 @@ services:
         limits:
           memory: 1536m
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c 'echo >/dev/tcp/127.0.0.1/6333'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -150,8 +150,8 @@ services:
     container_name: dt-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"   # FastAPI / REST
-      - "9000:9000"   # MCP Server
+      - "8001:8000"   # FastAPI / REST (host 8000 used by Docker Desktop)
+      - "9001:9000"   # MCP Server (host 9000 used by ZSATunnel)
     environment:
       NEO4J_URI: "bolt://neo4j:7687"
       NEO4J_USER: "${NEO4J_USER}"
@@ -203,7 +203,7 @@ services:
     container_name: dt-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       VITE_API_URL: "${VITE_API_URL}"
       VITE_WS_URL: "${VITE_WS_URL}"
