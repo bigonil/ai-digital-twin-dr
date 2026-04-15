@@ -1,4 +1,4 @@
-import { useRef, useCallback, useMemo } from 'react'
+import { useRef, useCallback, useMemo, useEffect, useState } from 'react'
 import { ForceGraph3D } from 'react-force-graph'
 
 const STATUS_COLOR = {
@@ -31,7 +31,19 @@ function nodeSize(node) {
 
 export default function Graph3D({ topology, blastRadius, onNodeClick }) {
   const fgRef = useRef()
+  const containerRef = useRef()
+  const [dims, setDims] = useState({ width: 0, height: 0 })
   const blastSet = useMemo(() => new Set(blastRadius.map(n => n.id)), [blastRadius])
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect
+      setDims({ width, height })
+    })
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
 
   const graphData = useMemo(() => {
     if (!topology) return { nodes: [], links: [] }
@@ -53,19 +65,25 @@ export default function Graph3D({ topology, blastRadius, onNodeClick }) {
   }, [onNodeClick])
 
   return (
-    <ForceGraph3D
-      ref={fgRef}
-      graphData={graphData}
-      backgroundColor="#0a0e1a"
-      nodeColor={n => n.__color}
-      nodeVal={n => n.__size}
-      nodeLabel={n => `${n.name}\n${n.type}\n${n.region ?? ''}`}
-      linkColor={l => l.type === 'DEPENDS_ON' ? '#3b82f6' : '#6b7280'}
-      linkWidth={1}
-      linkDirectionalArrowLength={4}
-      linkDirectionalArrowRelPos={1}
-      onNodeClick={handleNodeClick}
-      nodeThreeObjectExtend={false}
-    />
+    <div ref={containerRef} style={{ position: 'absolute', inset: 0 }}>
+      {dims.width > 0 && (
+        <ForceGraph3D
+          ref={fgRef}
+          graphData={graphData}
+          width={dims.width}
+          height={dims.height}
+          backgroundColor="#0a0e1a"
+          nodeColor={n => n.__color}
+          nodeVal={n => n.__size}
+          nodeLabel={n => `${n.name}\n${n.type}\n${n.region ?? ''}`}
+          linkColor={l => l.type === 'DEPENDS_ON' ? '#3b82f6' : '#6b7280'}
+          linkWidth={1}
+          linkDirectionalArrowLength={4}
+          linkDirectionalArrowRelPos={1}
+          onNodeClick={handleNodeClick}
+          nodeThreeObjectExtend={false}
+        />
+      )}
+    </div>
   )
 }
