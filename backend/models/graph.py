@@ -85,6 +85,7 @@ class AffectedNode(BaseModel):
     distance: int
     estimated_rto_minutes: int | None = None
     estimated_rpo_minutes: int | None = None
+    step_time_ms: int = 0
 
 
 class DisasterSimulationResult(BaseModel):
@@ -94,6 +95,23 @@ class DisasterSimulationResult(BaseModel):
     worst_case_rto_minutes: int | None = None
     worst_case_rpo_minutes: int | None = None
     recovery_steps: list[str] = Field(default_factory=list)
+
+
+class SimulationWithTimeline(BaseModel):
+    """Enhanced disaster simulation result with timeline animation data."""
+    origin_node_id: str
+    blast_radius: list[AffectedNode]
+    total_affected: int
+    worst_case_rto_minutes: int | None = None
+    worst_case_rpo_minutes: int | None = None
+    recovery_steps: list[str] = Field(default_factory=list)
+
+    # Timeline-specific fields
+    max_distance: int  # maximum BFS distance in cascade
+    total_duration_ms: int  # total animation duration (5000-8000ms)
+
+    # For MCP agents: raw timeline data for programmatic access
+    timeline_steps: list[dict] = Field(default_factory=list)  # [{node_id, step_time_ms, distance}, ...]
 
 
 class DriftResult(BaseModel):
