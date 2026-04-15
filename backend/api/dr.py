@@ -5,13 +5,57 @@ from models.graph import (
     AffectedNode,
     DisasterSimulationRequest,
     DisasterSimulationResult,
+    SimulationWithTimeline,
     DriftResult,
 )
 
 router = APIRouter()
 
 
-@router.post("/simulate", response_model=DisasterSimulationResult)
+def _calculate_step_times(affected_nodes: list[AffectedNode], total_duration_ms: int = 5000) -> tuple[list[AffectedNode], int, list[dict]]:
+    """
+    Calculate step_time_ms for each node based on BFS distance.
+
+    Args:
+        affected_nodes: List of affected nodes with distance field set
+        total_duration_ms: Total animation duration in milliseconds
+
+    Returns:
+        (updated_affected_nodes, max_distance, timeline_steps_list)
+    """
+    if not affected_nodes:
+        return affected_nodes, 0, []
+
+    # Find max distance
+    max_distance = max(node.distance for node in affected_nodes)
+
+    # Calculate step_time_ms for each node
+    updated_nodes = []
+    timeline_steps = []
+
+    for node in affected_nodes:
+        # Distance 0 → 0ms (instant), distance N → proportional time
+        step_time_ms = int(node.distance * (total_duration_ms / max_distance)) if max_distance > 0 else 0
+        node.step_time_ms = step_time_ms
+        updated_nodes.append(node)
+
+        # Record timeline step for MCP agents
+        timeline_steps.append({
+            "node_id": node.id,
+            "node_name": node.name,
+            "distance": node.distance,
+            "step_time_ms": step_time_ms,
+            "rto_minutes": node.estimated_rto_minutes,
+            "rpo_minutes": node.estimated_rpo_minutes,
+        })
+
+    # Sort timeline_steps by step_time_ms for easy playback
+    timeline_steps.sort(key=lambda x: x["step_time_ms"])
+
+    return updated_nodes, max_distance, timeline_steps
+
+
+@router.post("/simulate", response_model=SimulationWithTimeline)
 async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
     rows = await request.app.state.neo4j.simulate_disaster(body.node_id, body.depth)
 
@@ -34,6 +78,9 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         for r in rows
     ]
 
+    # NEW: Calculate step times for timeline animation
+    affected, max_distance, timeline_steps = _calculate_step_times(affected, total_duration_ms=5000)
+
     rtos = [a.estimated_rto_minutes for a in affected if a.estimated_rto_minutes]
     rpos = [a.estimated_rpo_minutes for a in affected if a.estimated_rpo_minutes]
 
@@ -42,13 +89,16 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         {"id": body.node_id},
     )
 
-    return DisasterSimulationResult(
+    return SimulationWithTimeline(
         origin_node_id=body.node_id,
         blast_radius=affected,
         total_affected=len(affected),
         worst_case_rto_minutes=max(rtos) if rtos else None,
         worst_case_rpo_minutes=max(rpos) if rpos else None,
         recovery_steps=_basic_recovery_steps(body.node_id, affected),
+        max_distance=max_distance,
+        total_duration_ms=5000,
+        timeline_steps=timeline_steps,
     )
 
 
