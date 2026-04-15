@@ -1,5 +1,5 @@
 import { useRef, useCallback, useMemo } from 'react'
-import ForceGraph3D from 'react-force-graph'
+import { ForceGraph3D } from 'react-force-graph'
 
 const STATUS_COLOR = {
   healthy:           '#10b981',

@@ -1,4 +1,5 @@
 """Neo4j async driver wrapper."""
+import json
 import re
 from typing import Any
 
@@ -64,7 +65,11 @@ class Neo4jClient:
         MERGE (n:{label} {{id: $id}})
         SET n += $props
         """
-        props = {k: v for k, v in node.items() if k != "id"}
+        props = {
+            k: (json.dumps(v) if isinstance(v, (dict, list)) else v)
+            for k, v in node.items()
+            if k != "id"
+        }
         await self.run(query, {"id": node["id"], "props": props})
 
     async def merge_edge(self, source: str, target: str, rel_type: str, props: dict | None = None) -> None:

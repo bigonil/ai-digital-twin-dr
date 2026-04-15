@@ -8,9 +8,11 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import structlog
+from qdrant_client.models import PointStruct
 
 from settings import Settings
 
@@ -33,7 +35,7 @@ def _chunk_text(text: str) -> list[str]:
 
 def _doc_id(file_path: str, chunk_idx: int) -> str:
     raw = f"{file_path}::{chunk_idx}"
-    return hashlib.md5(raw.encode()).hexdigest()
+    return str(UUID(hashlib.md5(raw.encode()).hexdigest()))
 
 
 async def _embed(text: str) -> list[float]:
@@ -68,19 +70,19 @@ async def ingest(docs_dir: str | Path, qdrant_client, neo4j_client=None) -> dict
                 continue
 
             doc_id = _doc_id(rel_path, idx)
-            points.append({
-                "id": doc_id,
-                "vector": vector,
-                "payload": {
+            points.append(PointStruct(
+                id=doc_id,
+                vector=vector,
+                payload={
                     "text": chunk,
                     "source_file": rel_path,
                     "chunk_index": idx,
                     "title": md_file.stem,
                 },
-            })
+            ))
 
         if points:
-            await qdrant_client.upsert(collection_name="dr_docs", points=points)
+            await qdrant_client.upsert(points=points)
             total_points += len(points)
 
         # Optionally create a Document node in Neo4j
