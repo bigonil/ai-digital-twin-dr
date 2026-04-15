@@ -1,6 +1,6 @@
 """
 MCP Server — exposes simulate_disaster, get_recovery_plan, check_drift
-to external AI agents (Claude Code / GitHub Copilot).
+and timeline-aware tools to external AI agents (Claude Code / GitHub Copilot).
 """
 from __future__ import annotations
 
@@ -22,6 +22,11 @@ server = Server("digital-twin-dr")
 
 _neo4j: Neo4jClient | None = None
 _qdrant: QdrantClient | None = None
+
+# Simple in-memory simulation cache
+# In production, use Redis with TTL
+SIMULATION_CACHE = {}
+SIMULATION_COUNTER = 0
 
 
 async def _get_neo4j() -> Neo4jClient:
@@ -77,6 +82,39 @@ async def list_tools() -> list[Tool]:
             description="Compare Terraform state vs Neo4j graph and return differences.",
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
+        Tool(
+            name="get_simulation_timeline",
+            description=(
+                "Get timeline data for a running simulation. Useful for agents to inspect "
+                "cascading failures step-by-step at a specific point in time."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "simulation_id": {"type": "string", "description": "Simulation ID from simulate_disaster"},
+                    "query_at_time_ms": {
+                        "type": "integer",
+                        "description": "Query state at this millisecond (optional, defaults to full duration)",
+                    },
+                },
+                "required": ["simulation_id"],
+            },
+        ),
+        Tool(
+            name="analyze_cascading_failure",
+            description=(
+                "Analyze cascading failure at a specific time. Returns node count, RTO/RPO metrics, "
+                "and affected node IDs."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "simulation_id": {"type": "string", "description": "Simulation ID"},
+                    "time_ms": {"type": "integer", "description": "Time in milliseconds"},
+                },
+                "required": ["simulation_id", "time_ms"],
+            },
+        ),
     ]
 
 
@@ -91,12 +129,58 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         if not rows:
             text = f"No downstream impact found for node '{node_id}' within depth {depth}."
-        else:
-            lines = [f"💥 Blast radius for '{node_id}' ({len(rows)} affected nodes):\n"]
-            for r in rows:
-                rto = f"RTO={r.get('rto_minutes')}min" if r.get("rto_minutes") else ""
-                lines.append(f"  depth={r['distance']} | {r['name']} ({r['type']}) {rto}")
-            text = "\n".join(lines)
+            return [TextContent(type="text", text=text)]
+
+        # Calculate step times for timeline
+        from models.graph import AffectedNode
+        from api.dr import _calculate_step_times
+
+        affected = [
+            AffectedNode(
+                id=r["id"],
+                name=r.get("name", r["id"]),
+                type=r.get("type", "unknown"),
+                distance=r["distance"],
+                estimated_rto_minutes=r.get("rto_minutes"),
+                estimated_rpo_minutes=r.get("rpo_minutes"),
+            )
+            for r in rows
+        ]
+
+        affected, max_distance, timeline_steps = _calculate_step_times(affected, total_duration_ms=5000)
+
+        # Cache simulation result
+        global SIMULATION_COUNTER
+        sim_id = f"sim_{SIMULATION_COUNTER}"
+        SIMULATION_COUNTER += 1
+
+        SIMULATION_CACHE[sim_id] = {
+            "node_id": node_id,
+            "timeline_steps": timeline_steps,
+            "total_duration_ms": 5000,
+            "max_distance": max_distance,
+            "blast_radius": [
+                {
+                    "node_id": n.id,
+                    "node_name": n.name,
+                    "distance": n.distance,
+                    "step_time_ms": n.step_time_ms,
+                    "rto_minutes": n.estimated_rto_minutes,
+                    "rpo_minutes": n.estimated_rpo_minutes,
+                }
+                for n in affected
+            ],
+        }
+
+        lines = [
+            f"💥 Blast radius for '{node_id}' ({len(affected)} affected nodes):\n",
+            f"📊 Simulation ID: {sim_id}\n",
+        ]
+        for r in rows:
+            rto = f"RTO={r.get('rto_minutes')}min" if r.get("rto_minutes") else ""
+            lines.append(f"  depth={r['distance']} | {r['name']} ({r['type']}) {rto}")
+        lines.append(f"\nTimeline: 0-5000ms ({len(timeline_steps)} steps)")
+        text = "\n".join(lines)
 
         return [TextContent(type="text", text=text)]
 
@@ -149,6 +233,72 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             lines.append(f"  … and {len(graph_nodes) - 20} more")
         lines.append("\nNote: Full Terraform state comparison requires running `parsers/infra.py`.")
         return [TextContent(type="text", text="\n".join(lines))]
+
+    if name == "get_simulation_timeline":
+        sim_id = arguments.get("simulation_id")
+        query_time = arguments.get("query_at_time_ms", float("inf"))
+
+        if not sim_id or sim_id not in SIMULATION_CACHE:
+            text = f"❌ Simulation '{sim_id}' not found. Run simulate_disaster first."
+            return [TextContent(type="text", text=text)]
+
+        sim_data = SIMULATION_CACHE[sim_id]
+
+        active_nodes = [
+            step for step in sim_data["timeline_steps"] if step["step_time_ms"] <= query_time
+        ]
+
+        lines = [
+            f"📈 Timeline for simulation {sim_id}\n",
+            f"Query time: {query_time}ms / {sim_data['total_duration_ms']}ms\n",
+            f"Nodes active at this time: {len(active_nodes)}\n\n",
+            "Active nodes:\n",
+        ]
+        for node in active_nodes:
+            lines.append(
+                f"  {node['node_id']} ({node['node_name']}) — depth {node['distance']}, "
+                f"activated at {node['step_time_ms']}ms"
+            )
+
+        text = "\n".join(lines)
+        return [TextContent(type="text", text=text)]
+
+    if name == "analyze_cascading_failure":
+        sim_id = arguments.get("simulation_id")
+        time_ms = arguments.get("time_ms", 0)
+
+        if not sim_id or sim_id not in SIMULATION_CACHE:
+            text = f"❌ Simulation '{sim_id}' not found."
+            return [TextContent(type="text", text=text)]
+
+        sim_data = SIMULATION_CACHE[sim_id]
+
+        active_nodes = [
+            step for step in sim_data["timeline_steps"] if step["step_time_ms"] <= time_ms
+        ]
+
+        rtos = [n.get("rto_minutes") for n in active_nodes if n.get("rto_minutes")]
+        rpos = [n.get("rpo_minutes") for n in active_nodes if n.get("rpo_minutes")]
+
+        max_distance = max([n["distance"] for n in active_nodes], default=0)
+        worst_rto = max(rtos) if rtos else None
+        worst_rpo = max(rpos) if rpos else None
+
+        lines = [
+            f"🔍 Cascading failure analysis at {time_ms}ms\n\n",
+            f"Simulation: {sim_id}\n",
+            f"Time: {time_ms}ms / {sim_data['total_duration_ms']}ms\n",
+            f"Nodes affected: {len(active_nodes)}\n",
+            f"Max distance reached: {max_distance}\n",
+            f"Worst-case RTO: {worst_rto}min" if worst_rto else "Worst-case RTO: —",
+            f"\nWorst-case RPO: {worst_rpo}min\n" if worst_rpo else "\nWorst-case RPO: —\n",
+            f"\nAffected node IDs:\n",
+        ]
+        for node in active_nodes:
+            lines.append(f"  - {node['node_id']}")
+
+        text = "\n".join(lines)
+        return [TextContent(type="text", text=text)]
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
