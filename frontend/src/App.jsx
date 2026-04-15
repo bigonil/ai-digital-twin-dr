@@ -8,6 +8,7 @@ import { getTopology } from './api/client.js'
 export default function App() {
   const [selectedNode, setSelectedNode] = useState(null)
   const [blastRadius, setBlastRadius] = useState([])
+  const [simulationTime, setSimulationTime] = useState(null)
 
   const { data: topology, isLoading } = useQuery({
     queryKey: ['topology'],
@@ -42,6 +43,7 @@ export default function App() {
               topology={topology}
               blastRadius={blastRadius}
               onNodeClick={setSelectedNode}
+              simulationTime={simulationTime}
             />
           )}
         </main>
@@ -54,7 +56,11 @@ export default function App() {
       <DisasterPanel
         selectedNode={selectedNode}
         onSimulationResult={setBlastRadius}
-        onReset={() => setBlastRadius([])}
+        onReset={() => {
+          setBlastRadius([])
+          setSimulationTime(null)
+        }}
+        onSimulationTimeChange={setSimulationTime}
       />
     </div>
   )
