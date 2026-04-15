@@ -186,6 +186,59 @@ curl -X POST http://localhost:8001/api/parse/docs \
 
 ---
 
+## 🎬 Dynamic Disaster Simulation Timeline
+
+The platform now visualizes cascading failures in **real-time** with an interactive timeline:
+
+### Features
+
+- **Sequential Propagation**: Watch nodes turn RED as the cascade spreads (0ms → 5000ms)
+- **Interactive Timeline**: Play/pause/rewind/speed up the simulation
+- **Live Metrics**: Affected node count and RTO/RPO update as time progresses
+- **Visual Effects**: 
+  - Nodes flash when they activate
+  - Distance badges show cascading depth (0, 1, 2, 3...)
+  - Dependency links illuminate as failures propagate
+
+### Usage
+
+1. Click **Simulate** on a node
+2. Timeline player appears in the bottom panel:
+   - **Play/Pause** — control animation
+   - **Rewind** — reset to beginning
+   - **Progress bar** — seek to any point
+   - **Speed slider** — adjust animation speed (0.25x to 2.0x)
+3. Watch the 3D graph update in real-time
+4. Live stats show cascading impact
+
+### Timeline Data
+
+The `/api/dr/simulate` endpoint now returns:
+
+```json
+{
+  "blast_radius": [
+    {
+      "id": "app-001",
+      "name": "API Server",
+      "type": "aws_instance",
+      "distance": 1,
+      "step_time_ms": 2500,
+      "estimated_rto_minutes": 10,
+      "estimated_rpo_minutes": 2
+    }
+  ],
+  "timeline_steps": [
+    {"node_id": "db-001", "step_time_ms": 0, "distance": 0},
+    {"node_id": "app-001", "step_time_ms": 2500, "distance": 1}
+  ],
+  "max_distance": 2,
+  "total_duration_ms": 5000
+}
+```
+
+---
+
 ## 🤖 MCP Server Integration
 
 The platform exposes a [Model Context Protocol](https://modelcontextprotocol.io) server so AI agents (Claude Code, GitHub Copilot) can query and manipulate the graph directly.
@@ -194,9 +247,37 @@ The platform exposes a [Model Context Protocol](https://modelcontextprotocol.io)
 
 | Tool | Description |
 |------|-------------|
-| `simulate_disaster(node_id, depth)` | Recursive impact analysis — finds all cascading failures from a node |
+| `simulate_disaster(node_id, depth)` | Recursive impact analysis — returns timeline with step_time_ms for each affected node |
 | `get_recovery_plan(target)` | Queries Neo4j + Qdrant to produce a step-by-step DR playbook |
 | `check_drift()` | Compares Terraform state files vs. current Neo4j graph |
+| `get_simulation_timeline(simulation_id, query_at_time_ms)` | Query cached simulation — returns nodes active at time T (milliseconds) |
+| `analyze_cascading_failure(simulation_id, time_ms)` | RTO/RPO metrics and affected node count at a specific point in the cascade |
+
+### Timeline-Aware Simulation
+
+The `simulate_disaster` tool now returns cascading failure timelines with millisecond-precision step times. External agents can then query the cached simulation at any point in time:
+
+**Example: Agent-Driven Analysis**
+
+1. **Run simulation** → get `simulation_id`
+   ```bash
+   # MCP Tool: simulate_disaster(node_id="db-001", depth=5)
+   # Returns: simulation_id="sim_0", timeline_steps with step_time_ms
+   ```
+
+2. **Query state at 2500ms** → see which nodes have failed
+   ```bash
+   # MCP Tool: get_simulation_timeline(simulation_id="sim_0", query_at_time_ms=2500)
+   # Returns: 2 nodes active (origin + distance-1)
+   ```
+
+3. **Analyze impact at 5000ms** → RTO/RPO for full cascade
+   ```bash
+   # MCP Tool: analyze_cascading_failure(simulation_id="sim_0", time_ms=5000)
+   # Returns: max_distance, worst_case_rto, worst_case_rpo, affected_node_ids
+   ```
+
+This enables agents to step through failures at granular time points, extract SLA impact metrics, and generate recovery runbooks.
 
 ### Connect Claude Code
 
