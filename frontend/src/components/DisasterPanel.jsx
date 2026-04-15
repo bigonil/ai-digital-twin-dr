@@ -2,16 +2,20 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Zap, RotateCcw, AlertTriangle } from 'lucide-react'
 import { simulateDisaster, resetNode } from '../api/client.js'
+import SimulationTimeline from './SimulationTimeline.jsx'
 
-export default function DisasterPanel({ selectedNode, onSimulationResult, onReset }) {
+export default function DisasterPanel({ selectedNode, onSimulationResult, onReset, onSimulationTimeChange }) {
   const [depth, setDepth] = useState(5)
   const [blastRows, setBlastRows] = useState([])
+  const [simulationTime, setSimulationTime] = useState(0)
+  const [simulationResult, setSimulationResult] = useState(null)
   const qc = useQueryClient()
 
   const simMutation = useMutation({
     mutationFn: () => simulateDisaster(selectedNode.id, depth),
     onSuccess: (data) => {
       setBlastRows(data.blast_radius ?? [])
+      setSimulationResult(data)
       onSimulationResult(data.blast_radius ?? [])
     },
   })
@@ -20,13 +24,15 @@ export default function DisasterPanel({ selectedNode, onSimulationResult, onRese
     mutationFn: () => resetNode(selectedNode.id),
     onSuccess: () => {
       setBlastRows([])
+      setSimulationTime(0)
+      setSimulationResult(null)
       onReset()
       qc.invalidateQueries({ queryKey: ['topology'] })
     },
   })
 
   return (
-    <div className="bg-dt-surface border-t border-dt-border px-4 py-3 shrink-0" style={{ maxHeight: '260px' }}>
+    <div className="bg-dt-surface border-t border-dt-border px-4 py-3 shrink-0" style={{ maxHeight: '340px' }}>
       <div className="flex items-center gap-4 mb-2">
         <span className="text-xs font-mono text-gray-400 uppercase tracking-widest flex items-center gap-1">
           <AlertTriangle size={12} className="text-dt-warning" /> Disaster Simulation
@@ -62,6 +68,18 @@ export default function DisasterPanel({ selectedNode, onSimulationResult, onRese
         </p>
       ) : (
         <p className="text-xs text-gray-600 font-mono mb-2">Click a node in the graph to select it.</p>
+      )}
+
+      {simulationResult && (
+        <div className="mb-3 pb-3 border-b border-dt-border/30">
+          <SimulationTimeline
+            simulationResult={simulationResult}
+            onTimeChange={(time) => {
+              setSimulationTime(time)
+              if (onSimulationTimeChange) onSimulationTimeChange(time)
+            }}
+          />
+        </div>
       )}
 
       {blastRows.length > 0 && (
