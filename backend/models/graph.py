@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CloudProvider(str, Enum):
@@ -34,13 +34,38 @@ class InfraNode(BaseModel):
     properties: dict[str, Any] = Field(default_factory=dict)
     labels: list[str] = Field(default_factory=list)
 
+    @field_validator("provider", mode="before")
+    @classmethod
+    def _default_provider(cls, v: Any) -> Any:
+        return v if v is not None else CloudProvider.unknown
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _default_status(cls, v: Any) -> Any:
+        return v if v is not None else ResourceStatus.unknown
+
+    @field_validator("is_redundant", mode="before")
+    @classmethod
+    def _default_is_redundant(cls, v: Any) -> Any:
+        return v if v is not None else False
+
 
 class InfraEdge(BaseModel):
     source: str
     target: str
-    type: str
+    type: str = "CONNECTS"
     weight: float = 1.0
     properties: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _default_type(cls, v: Any) -> Any:
+        return v if v is not None else "CONNECTS"
+
+    @field_validator("weight", mode="before")
+    @classmethod
+    def _default_weight(cls, v: Any) -> Any:
+        return v if v is not None else 1.0
 
 
 class InfraGraph(BaseModel):
