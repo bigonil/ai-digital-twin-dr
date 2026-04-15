@@ -1,9 +1,50 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Graph3D from './components/Graph3D.jsx'
 import DisasterPanel from './components/DisasterPanel.jsx'
 import MetricsSidebar from './components/MetricsSidebar.jsx'
 import { getTopology } from './api/client.js'
+
+// Error Boundary Fallback
+function ErrorFallback({error}) {
+  return (
+    <div className="flex items-center justify-center h-screen bg-dt-bg text-center px-8">
+      <div>
+        <h1 className="text-2xl font-bold text-dt-danger mb-4">Something went wrong</h1>
+        <p className="text-gray-400 font-mono text-sm mb-6">{error?.message || 'Unknown error'}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-dt-accent hover:bg-blue-600 text-white rounded font-mono text-sm"
+        >
+          Reload Page
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Simple Error Boundary Class Component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback error={this.state.error} />
+    }
+    return this.props.children
+  }
+}
 
 export default function App() {
   const [selectedNode, setSelectedNode] = useState(null)
@@ -16,7 +57,8 @@ export default function App() {
   })
 
   return (
-    <div className="flex flex-col h-screen bg-dt-bg text-gray-100 overflow-hidden">
+    <ErrorBoundary>
+      <div className="flex flex-col h-screen bg-dt-bg text-gray-100 overflow-hidden">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 bg-dt-surface border-b border-dt-border shrink-0">
         <div className="flex items-center gap-3">
@@ -63,5 +105,6 @@ export default function App() {
         onSimulationTimeChange={setSimulationTime}
       />
     </div>
+    </ErrorBoundary>
   )
 }

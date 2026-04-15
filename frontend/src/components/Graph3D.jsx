@@ -74,12 +74,12 @@ export default function Graph3D({
     })
     ro.observe(containerRef.current)
 
-    // Fallback: retry after a short delay if dimensions not set
+    // Fallback: retry after a delay if dimensions not set
     const timer = setTimeout(() => {
       if (dims.width === 0) {
         updateDims()
       }
-    }, 100)
+    }, 500)
 
     return () => {
       ro.disconnect()

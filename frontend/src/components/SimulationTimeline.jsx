@@ -36,11 +36,11 @@ export default function SimulationTimeline({ simulationResult, onTimeChange }) {
   )
 
   const worstRto = affectedNodes.length > 0
-    ? Math.max(...affectedNodes.map((n) => n.rto_minutes || 0))
+    ? Math.max(...affectedNodes.map((n) => n.estimated_rto_minutes || 0))
     : null
 
   const worstRpo = affectedNodes.length > 0
-    ? Math.max(...affectedNodes.map((n) => n.rpo_minutes || 0))
+    ? Math.max(...affectedNodes.map((n) => n.estimated_rpo_minutes || 0))
     : null
 
   // Format time as MM:SS.M

@@ -97,7 +97,7 @@ export default function DisasterPanel({ selectedNode, onSimulationResult, onRese
                   <td className="py-0.5 pr-4 text-dt-danger">{r.distance}</td>
                   <td className="py-0.5 pr-4 text-gray-200">{r.name}</td>
                   <td className="py-0.5 pr-4 text-gray-400">{r.type}</td>
-                  <td className="py-0.5 pr-4 text-dt-warning">{r.rto_minutes ? `${r.rto_minutes}m` : '—'}</td>
+                  <td className="py-0.5 pr-4 text-dt-warning">{r.estimated_rto_minutes ? `${r.estimated_rto_minutes}m` : '—'}</td>
                 </tr>
               ))}
             </tbody>
