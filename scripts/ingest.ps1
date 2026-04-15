@@ -6,7 +6,7 @@
     Calls the backend API to trigger parsers. Requires services to be running.
 #>
 
-$Base = "http://localhost:8000"
+$Base = "http://localhost:8001"
 
 function Invoke-Api($method, $path, $body = $null) {
     $params = @{
@@ -36,4 +36,4 @@ Write-Host "`n==> Graph node summary" -ForegroundColor Cyan
 $nodes = Invoke-Api "GET" "/api/graph/nodes"
 if ($nodes) { Write-Host "  Total nodes: $($nodes.Count)" -ForegroundColor White }
 
-Write-Host "`nDone. Open http://localhost:3000 to explore the graph.`n" -ForegroundColor Green
+Write-Host "`nDone. Open http://localhost:3001 to explore the graph.`n" -ForegroundColor Green
