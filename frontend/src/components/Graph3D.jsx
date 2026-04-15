@@ -56,12 +56,35 @@ export default function Graph3D({
 
   useEffect(() => {
     if (!containerRef.current) return
-    const ro = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect
-      setDims({ width, height })
+
+    // Set initial dimensions from container
+    const updateDims = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect()
+        if (width > 0 && height > 0) {
+          setDims({ width, height })
+        }
+      }
+    }
+
+    updateDims()
+
+    const ro = new ResizeObserver(() => {
+      updateDims()
     })
     ro.observe(containerRef.current)
-    return () => ro.disconnect()
+
+    // Fallback: retry after a short delay if dimensions not set
+    const timer = setTimeout(() => {
+      if (dims.width === 0) {
+        updateDims()
+      }
+    }, 100)
+
+    return () => {
+      ro.disconnect()
+      clearTimeout(timer)
+    }
   }, [])
 
   // Detect which nodes are "activating" (just crossed their step_time_ms)
