@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import Graph3D from './components/Graph3D.jsx'
+import TopologyViewer from './components/TopologyViewer.jsx'
 import DisasterPanel from './components/DisasterPanel.jsx'
 import MetricsSidebar from './components/MetricsSidebar.jsx'
 import { getTopology } from './api/client.js'
@@ -74,18 +74,17 @@ export default function App() {
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* 3D Graph — takes remaining space */}
+        {/* Topology Viewer */}
         <main className="flex-1 relative">
           {isLoading ? (
             <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">
               Connecting to graph database…
             </div>
           ) : (
-            <Graph3D
+            <TopologyViewer
               topology={topology}
-              blastRadius={blastRadius}
-              onNodeClick={setSelectedNode}
-              simulationTime={simulationTime}
+              selectedNode={selectedNode}
+              onNodeSelect={setSelectedNode}
             />
           )}
         </main>
