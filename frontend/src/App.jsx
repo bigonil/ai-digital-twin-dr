@@ -96,6 +96,7 @@ export default function App() {
       {/* Bottom panel — disaster sim */}
       <DisasterPanel
         selectedNode={selectedNode}
+        topology={topology}
         onSimulationResult={setBlastRadius}
         onReset={() => {
           setBlastRadius([])

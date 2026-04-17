@@ -29,14 +29,7 @@ export function useSimulationPlayback(totalDuration) {
 
       setSimulationTime((prevTime) => {
         const newTime = prevTime + deltaMs * speed;
-
-        // Auto-pause when reaching the end
-        if (newTime >= totalDuration) {
-          setIsPlaying(false);
-          return totalDuration;
-        }
-
-        return newTime;
+        return Math.min(newTime, totalDuration);
       });
 
       animationFrameRef.current = requestAnimationFrame(animate);
@@ -51,6 +44,13 @@ export function useSimulationPlayback(totalDuration) {
       }
     };
   }, [isPlaying, speed, totalDuration]);
+
+  // Auto-pause when reaching the end
+  useEffect(() => {
+    if (simulationTime >= totalDuration && totalDuration > 0 && isPlaying) {
+      setIsPlaying(false);
+    }
+  }, [simulationTime, totalDuration, isPlaying]);
 
   // Control callbacks
   const play = useCallback(() => {
