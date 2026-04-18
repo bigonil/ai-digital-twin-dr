@@ -186,55 +186,114 @@ curl -X POST http://localhost:8001/api/parse/docs \
 
 ---
 
-## 🎬 Dynamic Disaster Simulation Timeline & 2D Propagation Visualization
+## 🎬 Dynamic Disaster Simulation — Unified Dashboard with 2D Propagation, Metrics & Report
 
-The platform visualizes cascading failures in **real-time** with an interactive timeline and immersive 2D visualization:
+The platform visualizes cascading failures in **real-time** with an integrated 3-column dashboard, interactive timeline, and comprehensive post-simulation report:
+
+### Dashboard Layout
+
+```
+┌──────────────────────────────────────────────────────────┐
+│               Header (Node Count)                        │
+├──────────┬──────────────────────┬──────────────────────┤
+│Topology  │  2D Infrastructure    │  Metrics Dashboard   │
+│Viewer    │  Map                  │  (per-node)          │
+│(list)    │  • All topo nodes     │  • CPU/Memory bars   │
+│  w-56    │  • Connections        │  • Sparklines        │
+│  border-r│  • Blast propagation  │  • 8+ metrics        │
+│          │  • WoW animations     │  • RTO/RPO           │
+├──────────┴──────────────────────┴──────────────────────┤
+│ Simulation Controls (depth input + Simulate/Reset) h-14 │
+├─────────────────────────────────────────────────────────┤
+│ SimulationTimeline (play/pause/speed/progress)   h-20   │
+├─────────────────────────────────────────────────────────┤
+│ SimulationReport (5 sections, scrollable)       max-h-64│
+└─────────────────────────────────────────────────────────┘
+```
 
 ### Features
 
-- **Topology Viewer**: Browse infrastructure nodes from Neo4j database with search/filter capability
-- **Sequential Propagation**: Watch nodes turn RED as the cascade spreads (0ms → 5000ms)
-- **Interactive Timeline**: Play/pause/rewind/speed up the simulation
-- **2D Propagation Map**: 
-  - Concentric circle layout showing disaster propagation distance (hop-by-hop)
-  - Nodes colored by status: 🟢 Healthy, 🟡 Degraded, 🔴 Failed
-  - Animated edge flows showing propagation paths
-  - Real-time node state rendering synchronized with timeline playback
-- **Full-Screen "WoW" Visualization**: Immersive tab with:
-  - Animated glow effects for actively failing nodes (0.8s pulse)
-  - Flowing edge animations showing cascading propagation (1.5s gradient flows)
-  - Distance rings with hop count labels
-  - Grid background with gradient overlay for depth
-  - Legend and node statistics display
-- **Live Metrics**: Affected node count and RTO/RPO update as time progresses
-- **Visual Effects**: 
-  - Nodes flash when they activate
-  - Distance badges show cascading depth (0, 1, 2, 3...)
-  - Dependency links illuminate as failures propagate
+**Topology Viewer (Left Panel)**
+- Browse all infrastructure nodes from Neo4j
+- Click to select a node for simulation
+- Node type icons and status badges
 
-### Usage
+**Infrastructure Map (Center Panel)**
+- **Tiered Layout**: Nodes grouped by architectural tier (LB → Compute → Data → Storage)
+- **Real-Time Propagation**: Watch nodes turn RED as the cascade spreads (0ms → total_duration_ms)
+- **All Topology Edges**: Base layer shows complete infrastructure dependency graph
+- **Blast Radius Highlighting**: Selected nodes and edges animate with gradient flows
+- **WoW Animations**:
+  - `pulse-glow` (0.8s): Nodes actively failing — bright red pulse
+  - `pulse-healthy` (2s): Nodes in blast radius — steady green glow
+  - `edge-flow` (1.5s): Propagation paths — animated gradient flows
+  - `hop-ring` (2s): Origin node — concentric ripple effect
+- **Node Status**: Colored circles (🟢 Healthy, 🟡 Degraded, 🔴 Failed) with icons
 
-1. **Select a Node**: Click any infrastructure node in the Topology Viewer (left panel)
-2. **Configure Simulation**: Set the propagation depth (default: 5 hops)
+**Metrics Dashboard (Right Panel)**
+- **Per-Node Metrics**: 
+  - CPU/Memory bars with historical sparklines
+  - Request rate, error rate, latency percentiles (p50/p95/p99)
+  - Throughput, disk I/O, replication lag (database nodes only)
+  - RTO/RPO and redundancy status
+- **Deterministic Mock Data**: Same node always shows identical values; seeded variation across nodes
+- **Type-Aware Baselines**: Databases show high memory/replication lag; load balancers show high request rates
+- **Idle State**: "Select a node to view observability metrics"
+
+**Simulation Controls**
+- **Depth Input**: Set propagation depth (1-10 hops, default 5)
+- **Simulate Button**: Triggers disaster simulation on selected node
+- **Reset Button**: Clears simulation state and returns to idle topology view
+
+**Interactive Timeline** (appears after simulation)
+- **Play/Pause**: Control animation playback
+- **Rewind**: Reset to start of simulation
+- **Speed Slider**: 0.25x to 2.0x animation speed
+- **Progress Bar**: Visual timeline of failure cascade (0ms → total_duration_ms)
+- **Auto-pause**: Playback automatically pauses at simulation end
+
+**Post-Simulation Report** (appears when playback completes)
+- **Executive Summary**: Origin node, failure mode, affected count, max hops, worst RTO/RPO
+- **Impact Table**: Sortable table showing all affected nodes with distance, type, RTO/RPO
+- **Timeline of Events**: Chronological list of node failures with millisecond precision
+- **Root Cause Analysis**: Auto-generated failure description based on node type
+- **Mitigation Actions**: Recovery steps + architecture-specific recommendations + best practices
+- **Collapsible Sections**: Each report section can be expanded/collapsed for focused analysis
+
+### Usage Workflow
+
+1. **Select a Node**: Click any node in the Topology Viewer (left panel)
+2. **Configure Simulation**: Set propagation depth in the control bar (default: 5)
 3. **Simulate**: Click the red "Simulate" button
-4. **Review Results**:
-   - Timeline appears showing the cascade sequence
-   - Blast radius table shows all affected nodes
-   - Toggle **Map/Table** to view 2D visualization
-   - Click **Fullscreen** button to open immersive 2D visualization
+4. **Review Blast Radius**: 
+   - Infrastructure Map highlights all affected nodes
+   - Metrics Dashboard shows selected node's observability metrics
 5. **Playback**:
    - Click **Play** to animate the disaster propagation
-   - Adjust **Speed** slider to control animation speed (0.25x to 2.0x)
-   - Nodes glow red as they fail in sequence
-   - Edges show blue flow animation indicating propagation paths
+   - Watch nodes pulse in sequence as failures cascade
+   - Adjust **Speed** slider for faster/slower animation
+6. **Analyze Results**:
+   - SimulationTimeline shows cascade progression with timeline bar
+   - SimulationReport appears at playback end with detailed analysis
+   - Review RTO/RPO impact, recovery steps, and recommendations
 
-### Timeline Data
+### Simulation Response Data
 
-The `/api/dr/simulate` endpoint now returns:
+The `/api/dr/simulate` endpoint returns:
 
 ```json
 {
+  "origin_node_id": "db-001",
   "blast_radius": [
+    {
+      "id": "db-001",
+      "name": "Primary Database",
+      "type": "aws_rds_cluster",
+      "distance": 0,
+      "step_time_ms": 0,
+      "estimated_rto_minutes": 15,
+      "estimated_rpo_minutes": 1
+    },
     {
       "id": "app-001",
       "name": "API Server",
@@ -246,11 +305,18 @@ The `/api/dr/simulate` endpoint now returns:
     }
   ],
   "timeline_steps": [
-    {"node_id": "db-001", "step_time_ms": 0, "distance": 0},
-    {"node_id": "app-001", "step_time_ms": 2500, "distance": 1}
+    {"node_id": "db-001", "node_name": "Primary Database", "distance": 0, "step_time_ms": 0},
+    {"node_id": "app-001", "node_name": "API Server", "distance": 1, "step_time_ms": 2500}
   ],
-  "max_distance": 2,
-  "total_duration_ms": 5000
+  "recovery_steps": [
+    "Trigger automated failover to read replica",
+    "Update DNS to point to standby database",
+    "Restart application servers"
+  ],
+  "max_distance": 3,
+  "total_duration_ms": 5000,
+  "worst_case_rto_minutes": 15,
+  "worst_case_rpo_minutes": 2
 }
 ```
 
@@ -360,20 +426,22 @@ ai-digital-twin-dr/
 │   ├── package.json
 │   ├── vite.config.js
 │   ├── nginx.conf
-│   ├── README.md                   # Frontend documentation
+│   ├── README.md                        # Frontend documentation
 │   └── src/
-│       ├── App.jsx
+│       ├── App.jsx                      # Main layout: 3-column + timeline + report
 │       ├── api/client.js
 │       ├── hooks/
-│       │   └── useSimulationPlayback.js  # Timeline animation loop
+│       │   ├── useSimulationPlayback.js # Timeline animation loop
+│       │   └── useNodeMetrics.js        # Seeded deterministic mock metrics per node
+│       ├── utils/
+│       │   └── mapLayout.js             # Tiered layout algorithm for node positioning
 │       └── components/
-│           ├── Graph3D.jsx         # ForceGraph3D visualization (disabled)
-│           ├── TopologyViewer.jsx  # Infrastructure node browser
-│           ├── DisasterPanel.jsx   # Simulation controls & results
-│           ├── DisasterVisualization.jsx      # Compact 2D propagation map
-│           ├── DisasterVisualizationTab.jsx   # Full-screen immersive visualization
-│           ├── SimulationTimeline.jsx         # Timeline playback controls
-│           └── MetricsSidebar.jsx  # Live metrics from VictoriaMetrics
+│           ├── TopologyViewer.jsx       # Left panel: Infrastructure node browser
+│           ├── InfrastructureMap.jsx    # Center panel: 2D tiered visualization + animations
+│           ├── MetricsDashboard.jsx     # Right panel: Per-node observability metrics + sparklines
+│           ├── DisasterPanel.jsx        # Controls: Depth input + Simulate/Reset buttons
+│           ├── SimulationTimeline.jsx   # Timeline playback: play/pause/speed/progress
+│           └── SimulationReport.jsx     # 5-section post-simulation report (accordion)
 ├── data/
 │   ├── terraform/sample/       # Sample Terraform files for ingestion
 │   └── docs/                   # Sample architecture docs
