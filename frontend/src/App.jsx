@@ -1,12 +1,15 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import TopologyViewer from './components/TopologyViewer.jsx'
+import InfrastructureMap from './components/InfrastructureMap.jsx'
+import MetricsDashboard from './components/MetricsDashboard.jsx'
 import DisasterPanel from './components/DisasterPanel.jsx'
-import MetricsSidebar from './components/MetricsSidebar.jsx'
+import SimulationTimeline from './components/SimulationTimeline.jsx'
+import SimulationReport from './components/SimulationReport.jsx'
 import { getTopology } from './api/client.js'
 
 // Error Boundary Fallback
-function ErrorFallback({error}) {
+function ErrorFallback({ error }) {
   return (
     <div className="flex items-center justify-center h-screen bg-dt-bg text-center px-8">
       <div>
@@ -47,64 +50,100 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
+  // State management
   const [selectedNode, setSelectedNode] = useState(null)
-  const [blastRadius, setBlastRadius] = useState([])
-  const [simulationTime, setSimulationTime] = useState(null)
+  const [simulationResult, setSimulationResult] = useState(null)
+  const [simulationTime, setSimulationTime] = useState(0)
 
+  // Derived state
+  const isSimulationDone = simulationResult && simulationTime >= (simulationResult.total_duration_ms - 50)
+
+  // Fetch topology
   const { data: topology, isLoading } = useQuery({
     queryKey: ['topology'],
     queryFn: getTopology,
   })
 
+  // Handlers
+  const handleSimulation = (result) => {
+    setSimulationResult(result)
+    setSimulationTime(0)
+  }
+
+  const handleReset = () => {
+    setSimulationResult(null)
+    setSimulationTime(0)
+  }
+
+  const handleTimeChange = (ms) => {
+    setSimulationTime(ms)
+  }
+
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-screen bg-dt-bg text-gray-100 overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 bg-dt-surface border-b border-dt-border shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-dt-accent animate-pulse" />
-          <span className="font-mono font-bold text-dt-accent tracking-widest text-sm uppercase">
-            Digital Twin DR Platform
-          </span>
-        </div>
-        <div className="text-xs text-gray-500 font-mono">
-          {topology ? `${topology.nodes?.length ?? 0} nodes · ${topology.edges?.length ?? 0} edges` : 'Loading…'}
-        </div>
-      </header>
+        {/* Header */}
+        <header className="flex items-center justify-between px-6 py-3 bg-dt-surface border-b border-dt-border shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full bg-dt-accent animate-pulse" />
+            <span className="font-mono font-bold text-dt-accent tracking-widest text-sm uppercase">
+              Digital Twin DR Platform
+            </span>
+          </div>
+          <div className="text-xs text-gray-500 font-mono">
+            {topology ? `${topology.nodes?.length ?? 0} nodes · ${topology.edges?.length ?? 0} edges` : 'Loading…'}
+          </div>
+        </header>
 
-      {/* Main layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Topology Viewer */}
-        <main className="flex-1 relative">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">
-              Connecting to graph database…
-            </div>
-          ) : (
-            <TopologyViewer
+        {/* Main 3-column layout */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Column A: Topology Viewer (left sidebar, fixed width) */}
+          <aside className="w-56 shrink-0 overflow-y-auto border-r border-dt-border">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">
+                Connecting…
+              </div>
+            ) : (
+              <TopologyViewer
+                topology={topology}
+                selectedNode={selectedNode}
+                onNodeSelect={setSelectedNode}
+              />
+            )}
+          </aside>
+
+          {/* Column B: Infrastructure Map (center, flex-1) */}
+          <main className="flex-1 overflow-hidden">
+            <InfrastructureMap
               topology={topology}
+              simulationResult={simulationResult}
+              simulationTime={simulationTime}
               selectedNode={selectedNode}
               onNodeSelect={setSelectedNode}
             />
-          )}
-        </main>
+          </main>
 
-        {/* Right sidebar — metrics */}
-        <MetricsSidebar selectedNode={selectedNode} />
+          {/* Column C: Metrics Dashboard (right sidebar, fixed width) */}
+          <MetricsDashboard selectedNode={selectedNode} topology={topology} />
+        </div>
+
+        {/* Row 3: Simulation Controls */}
+        <DisasterPanel
+          selectedNode={selectedNode}
+          onSimulationResult={handleSimulation}
+          onReset={handleReset}
+        />
+
+        {/* Row 4: Timeline (conditional) */}
+        {simulationResult && (
+          <div className="shrink-0 bg-dt-surface border-t border-dt-border h-20">
+            <SimulationTimeline simulationResult={simulationResult} onTimeChange={handleTimeChange} />
+          </div>
+        )}
+
+        {/* Row 5: Report (conditional) */}
+        {isSimulationDone && <SimulationReport simulationResult={simulationResult} topology={topology} />}
       </div>
-
-      {/* Bottom panel — disaster sim */}
-      <DisasterPanel
-        selectedNode={selectedNode}
-        topology={topology}
-        onSimulationResult={setBlastRadius}
-        onReset={() => {
-          setBlastRadius([])
-          setSimulationTime(null)
-        }}
-        onSimulationTimeChange={setSimulationTime}
-      />
-    </div>
     </ErrorBoundary>
   )
 }
