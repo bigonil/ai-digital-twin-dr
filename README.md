@@ -186,14 +186,26 @@ curl -X POST http://localhost:8001/api/parse/docs \
 
 ---
 
-## 🎬 Dynamic Disaster Simulation Timeline
+## 🎬 Dynamic Disaster Simulation Timeline & 2D Propagation Visualization
 
-The platform now visualizes cascading failures in **real-time** with an interactive timeline:
+The platform visualizes cascading failures in **real-time** with an interactive timeline and immersive 2D visualization:
 
 ### Features
 
+- **Topology Viewer**: Browse infrastructure nodes from Neo4j database with search/filter capability
 - **Sequential Propagation**: Watch nodes turn RED as the cascade spreads (0ms → 5000ms)
 - **Interactive Timeline**: Play/pause/rewind/speed up the simulation
+- **2D Propagation Map**: 
+  - Concentric circle layout showing disaster propagation distance (hop-by-hop)
+  - Nodes colored by status: 🟢 Healthy, 🟡 Degraded, 🔴 Failed
+  - Animated edge flows showing propagation paths
+  - Real-time node state rendering synchronized with timeline playback
+- **Full-Screen "WoW" Visualization**: Immersive tab with:
+  - Animated glow effects for actively failing nodes (0.8s pulse)
+  - Flowing edge animations showing cascading propagation (1.5s gradient flows)
+  - Distance rings with hop count labels
+  - Grid background with gradient overlay for depth
+  - Legend and node statistics display
 - **Live Metrics**: Affected node count and RTO/RPO update as time progresses
 - **Visual Effects**: 
   - Nodes flash when they activate
@@ -202,14 +214,19 @@ The platform now visualizes cascading failures in **real-time** with an interact
 
 ### Usage
 
-1. Click **Simulate** on a node
-2. Timeline player appears in the bottom panel:
-   - **Play/Pause** — control animation
-   - **Rewind** — reset to beginning
-   - **Progress bar** — seek to any point
-   - **Speed slider** — adjust animation speed (0.25x to 2.0x)
-3. Watch the 3D graph update in real-time
-4. Live stats show cascading impact
+1. **Select a Node**: Click any infrastructure node in the Topology Viewer (left panel)
+2. **Configure Simulation**: Set the propagation depth (default: 5 hops)
+3. **Simulate**: Click the red "Simulate" button
+4. **Review Results**:
+   - Timeline appears showing the cascade sequence
+   - Blast radius table shows all affected nodes
+   - Toggle **Map/Table** to view 2D visualization
+   - Click **Fullscreen** button to open immersive 2D visualization
+5. **Playback**:
+   - Click **Play** to animate the disaster propagation
+   - Adjust **Speed** slider to control animation speed (0.25x to 2.0x)
+   - Nodes glow red as they fail in sequence
+   - Edges show blue flow animation indicating propagation paths
 
 ### Timeline Data
 
@@ -343,12 +360,19 @@ ai-digital-twin-dr/
 │   ├── package.json
 │   ├── vite.config.js
 │   ├── nginx.conf
+│   ├── README.md                   # Frontend documentation
 │   └── src/
 │       ├── App.jsx
 │       ├── api/client.js
+│       ├── hooks/
+│       │   └── useSimulationPlayback.js  # Timeline animation loop
 │       └── components/
-│           ├── Graph3D.jsx         # ForceGraph3D visualization
-│           ├── DisasterPanel.jsx   # Blast radius simulation UI
+│           ├── Graph3D.jsx         # ForceGraph3D visualization (disabled)
+│           ├── TopologyViewer.jsx  # Infrastructure node browser
+│           ├── DisasterPanel.jsx   # Simulation controls & results
+│           ├── DisasterVisualization.jsx      # Compact 2D propagation map
+│           ├── DisasterVisualizationTab.jsx   # Full-screen immersive visualization
+│           ├── SimulationTimeline.jsx         # Timeline playback controls
 │           └── MetricsSidebar.jsx  # Live metrics from VictoriaMetrics
 ├── data/
 │   ├── terraform/sample/       # Sample Terraform files for ingestion
