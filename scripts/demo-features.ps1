@@ -39,7 +39,7 @@ function Write-ErrorMsg {
 
 # Check if server is running
 try {
-    $null = Invoke-WebRequest "$BaseUrl/health" -ErrorAction Stop
+    $null = Invoke-WebRequest "$BaseUrl/health" -UseBasicParsing -ErrorAction Stop
     Write-Success "Backend is running"
 } catch {
     Write-ErrorMsg "Backend not running at $BaseUrl"
@@ -50,7 +50,7 @@ try {
 # Get first node from topology
 function Get-FirstNode {
     try {
-        $response = Invoke-WebRequest "$BaseUrl/api/graph/topology" -ErrorAction Stop
+        $response = Invoke-WebRequest "$BaseUrl/api/graph/topology" -UseBasicParsing -ErrorAction Stop
         $data = ConvertFrom-Json $response.Content
         return $data.nodes[0].id
     } catch {
@@ -66,7 +66,7 @@ Write-Info "Running compliance audit on all nodes..."
 Start-Sleep -Seconds $DemoDelay
 
 try {
-    $response = Invoke-WebRequest "$BaseUrl/api/compliance/run" -Method POST -ErrorAction Stop
+    $response = Invoke-WebRequest "$BaseUrl/api/compliance/run" -Method POST -UseBasicParsing -ErrorAction Stop
     $compliance = ConvertFrom-Json $response.Content
 
     Write-Success "Compliance audit completed"
@@ -79,7 +79,7 @@ try {
     Write-Info "Retrieving cached report..."
     Start-Sleep -Seconds $DemoDelay
 
-    $reportResponse = Invoke-WebRequest "$BaseUrl/api/compliance/report" -ErrorAction Stop
+    $reportResponse = Invoke-WebRequest "$BaseUrl/api/compliance/report" -UseBasicParsing -ErrorAction Stop
     $report = ConvertFrom-Json $reportResponse.Content
     $generatedAt = $report.generated_at.Substring(0, 10)
 
@@ -87,7 +87,7 @@ try {
     Write-Host ""
 
     Write-Info "Exporting as JSON..."
-    $exportResponse = Invoke-WebRequest "$BaseUrl/api/compliance/export" -ErrorAction Stop
+    $exportResponse = Invoke-WebRequest "$BaseUrl/api/compliance/export" -UseBasicParsing -ErrorAction Stop
     $exportResponse.Content | Out-File -FilePath "$env:TEMP\compliance-report.json"
     Write-Success "Exported to: $env:TEMP\compliance-report.json"
 } catch {
@@ -123,7 +123,7 @@ $whatifPayload = @{
 } | ConvertTo-Json -Depth 10
 
 try {
-    $response = Invoke-WebRequest "$BaseUrl/api/whatif/simulate" -Method POST `
+    $response = Invoke-WebRequest "$BaseUrl/api/whatif/simulate" -Method POST -UseBasicParsing `
         -ContentType "application/json" -Body $whatifPayload -ErrorAction Stop
     $whatif = ConvertFrom-Json $response.Content
 
@@ -151,7 +151,7 @@ $chaosPayload = @{
 } | ConvertTo-Json
 
 try {
-    $response = Invoke-WebRequest "$BaseUrl/api/chaos/experiments" -Method POST `
+    $response = Invoke-WebRequest "$BaseUrl/api/chaos/experiments" -Method POST -UseBasicParsing `
         -ContentType "application/json" -Body $chaosPayload -ErrorAction Stop
     $chaos = ConvertFrom-Json $response.Content
     $experimentId = $chaos.experiment_id
@@ -171,7 +171,7 @@ try {
     } | ConvertTo-Json
 
     $resultResponse = Invoke-WebRequest "$BaseUrl/api/chaos/experiments/$experimentId/actuals" `
-        -Method POST -ContentType "application/json" -Body $actualsPayload -ErrorAction Stop
+        -Method POST -UseBasicParsing -ContentType "application/json" -Body $actualsPayload -ErrorAction Stop
     $result = ConvertFrom-Json $resultResponse.Content
     $resilience = [math]::Round($result.resilience_score * 100, 0)
 
@@ -187,7 +187,8 @@ Write-Section "4. POSTMORTEM ANALYSIS"
 Write-Info "Analyzing a real incident..."
 Start-Sleep -Seconds $DemoDelay
 
-$incidentDate = (Get-Date -AsUTC).ToString("yyyy-MM-ddTHH:mm:ssZ")
+# PowerShell 5.1 compatible UTC date - use [System.DateTime]::UtcNow
+$incidentDate = [System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $postmortemPayload = @{
     title = "Database Primary Failover - Demo Incident"
     occurred_at = $incidentDate
@@ -200,7 +201,7 @@ $postmortemPayload = @{
 } | ConvertTo-Json
 
 try {
-    $response = Invoke-WebRequest "$BaseUrl/api/postmortem/reports" -Method POST `
+    $response = Invoke-WebRequest "$BaseUrl/api/postmortem/reports" -Method POST -UseBasicParsing `
         -ContentType "application/json" -Body $postmortemPayload -ErrorAction Stop
     $postmortem = ConvertFrom-Json $response.Content
     $reportId = $postmortem.report_id
