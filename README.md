@@ -322,6 +322,38 @@ The `/api/dr/simulate` endpoint returns:
 
 ---
 
+## 🛠️ Advanced Features
+
+Beyond the core DR Simulator, the platform includes 4 dedicated features for compliance, planning, incident analysis, and resilience testing:
+
+### **Compliance** — Audit Against SLAs
+- Run continuous audits against RTO/RPO thresholds (default: 60 min RTO, 15 min RPO)
+- Identify nodes in warning/failure state based on worst-case cascading impact
+- Export audit reports as JSON for stakeholders
+- **Use case**: Infrastructure team verifies compliance before/after changes
+
+### **What-If Analysis** — Test Architecture Changes
+- Model virtual infrastructure additions (replicas, caches, secondary regions)
+- Simulate baseline vs. proposed topology without modifying production
+- Compare blast radius and RTO/RPO deltas
+- **Use case**: Evaluate impact of planned redundancy or failover strategy before deployment
+
+### **Chaos Engineering** — Validate Resilience
+- Run chaos experiments with 5 failure modes (terminate, network loss, CPU hog, disk full, memory pressure)
+- Record actual results from lab tests and compare against predictions
+- Calculate resilience score based on RTO accuracy and node prediction accuracy
+- **Use case**: Proactively test systems; measure confidence in recovery predictions
+
+### **Postmortem Analysis** — Learn from Real Incidents
+- Analyze real production incidents against simulation predictions
+- Calculate prediction accuracy (precision, recall, F1-score)
+- Auto-generate recommendations based on false positives/negatives
+- **Use case**: Improve model over time; share incident data with stakeholders
+
+**📖 Full Guide**: See [FEATURES.md](./docs/FEATURES.md) for detailed workflows and examples.
+
+---
+
 ## 🤖 MCP Server Integration
 
 The platform exposes a [Model Context Protocol](https://modelcontextprotocol.io) server so AI agents (Claude Code, GitHub Copilot) can query and manipulate the graph directly.
