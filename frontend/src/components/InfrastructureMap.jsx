@@ -290,34 +290,11 @@ export default function InfrastructureMap({
 
           {/* Arrowhead markers for edge direction */}
           <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-            <path d="M 0 0 L 8 3 L 0 6 Z" fill="#475569" opacity="0.7" />
+            <path d="M 0 0 L 8 3 L 0 6 Z" fill="#64748b" />
           </marker>
           <marker id="arrowhead-active" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
             <path d="M 0 0 L 8 3 L 0 6 Z" fill="#ef4444" />
           </marker>
-
-          {/* Gradient defs for edge flows — one per blast edge */}
-          {blastEdges.map((edge, idx) => {
-            const p = getEdgePath(positions, edge)
-            if (!p) return null
-            const sourceNode = nodeMap.get(edge.source)
-            const targetNode = nodeMap.get(edge.target)
-            const sourceColor = getStatusColor(sourceNode?.status || 'unknown')
-            const targetColor = getStatusColor(targetNode?.status || 'unknown')
-            return (
-              <linearGradient
-                key={`grad-${idx}`}
-                id={`edgeGrad-${idx}`}
-                x1="0%"
-                y1="0%"
-                x2="100%"
-                y2="100%"
-              >
-                <stop offset="0%" stopColor={sourceColor} stopOpacity="0.8" />
-                <stop offset="100%" stopColor={targetColor} stopOpacity="0.8" />
-              </linearGradient>
-            )
-          })}
 
           {/* Grid background pattern */}
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -332,81 +309,28 @@ export default function InfrastructureMap({
         {topology.edges.map((edge, idx) => {
           const bezier = getBezierPath(positions, edge)
           if (!bezier) return null
+
+          // Check if this edge is in the blast radius
+          const inBlastRadius = simulationResult && blastIds.has(edge.source) && blastIds.has(edge.target)
+          const edgeStroke = inBlastRadius ? '#ef4444' : '#64748b'
+          const edgeWidth = inBlastRadius ? 3 : 2
+          const edgeOpacity = inBlastRadius ? 0.9 : 0.7
+
           return (
             <path
-              key={`edge-base-${idx}`}
+              key={`edge-${idx}`}
               d={bezier.d}
               fill="none"
-              stroke="#475569"
-              strokeWidth="1.5"
-              opacity="0.5"
-              markerEnd="url(#arrowhead)"
+              stroke={edgeStroke}
+              strokeWidth={edgeWidth}
+              opacity={edgeOpacity}
+              markerEnd={inBlastRadius ? 'url(#arrowhead-active)' : 'url(#arrowhead)'}
               pointerEvents="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
           )
         })}
-
-        {/* Simulation layer: Edges with propagation animation */}
-        {simulationResult &&
-          edgeStates.map(({ idx, edge, state, isPropagation }) => {
-            const bezier = getBezierPath(positions, edge)
-            if (!bezier) return null
-
-            let strokeColor = '#475569'
-            let strokeWidth = 2
-            let opacity = 0.4
-            let className = ''
-            let arrowMarker = 'url(#arrowhead)'
-
-            if (state === 'pending') {
-              strokeColor = '#f97316' // orange
-              opacity = 0.5
-              className = 'edge-pending'
-              strokeWidth = 2
-            } else if (state === 'flowing') {
-              strokeColor = '#ef4444' // red
-              opacity = 0.8
-              className = 'edge-active'
-              strokeWidth = 3
-              arrowMarker = 'url(#arrowhead-active)'
-            } else if (state === 'burned') {
-              strokeColor = '#991b1b' // dark red
-              opacity = 0.6
-              strokeWidth = 2
-            }
-
-            return (
-              <g key={`edge-state-${idx}`}>
-                {/* Edge path with animation */}
-                {state !== 'idle' && (
-                  <path
-                    d={bezier.d}
-                    fill="none"
-                    stroke={strokeColor}
-                    strokeWidth={strokeWidth}
-                    className={className}
-                    opacity={opacity}
-                    markerEnd={arrowMarker}
-                    pointerEvents="none"
-                    strokeLinecap="round"
-                  />
-                )}
-
-                {/* Animated particle pulsing at edge midpoint during flowing */}
-                {state === 'flowing' && (
-                  <circle
-                    cx={bezier.midX}
-                    cy={bezier.midY}
-                    r="4"
-                    fill="#ef4444"
-                    opacity="0.8"
-                    pointerEvents="none"
-                    className="particle-pulse"
-                  />
-                )}
-              </g>
-            )
-          })}
 
         {/* Node layer */}
         {topology.nodes.map((node) => {
