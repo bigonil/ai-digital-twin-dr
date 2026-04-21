@@ -172,6 +172,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             ],
         }
 
+        # Mark nodes in blast radius as simulated_failure in Neo4j
+        for affected_node in affected:
+            await neo4j.run(
+                "MATCH (n:InfraNode {id: $id}) SET n.status = 'simulated_failure' RETURN n.id",
+                {"id": affected_node.id},
+            )
+
         lines = [
             f"💥 Blast radius for '{node_id}' ({len(affected)} affected nodes):\n",
             f"📊 Simulation ID: {sim_id}\n",

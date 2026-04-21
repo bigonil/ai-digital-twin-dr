@@ -93,7 +93,7 @@ def parse_directory(terraform_dir: str | Path) -> tuple[list[InfraNode], list[In
                         provider=_detect_provider(resource_type),
                         region=_extract_region(config),
                         az=_extract_az(config),
-                        status=ResourceStatus.unknown,
+                        status=ResourceStatus.healthy,
                         is_redundant=resource_type in REDUNDANCY_TYPES,
                         properties={
                             "source_file": str(tf_file.relative_to(base)),
