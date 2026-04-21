@@ -400,22 +400,33 @@ export default function InfrastructureMap({
 
                 {/* Animated particle flowing along propagation path */}
                 {state === 'flowing' && (
-                  <circle
-                    cx={bezier.x1}
-                    cy={bezier.y1}
-                    r="5"
-                    fill="#ef4444"
-                    opacity="0.9"
-                    pointerEvents="none"
-                    className="particle-flow"
-                    style={{
-                      offsetPath: `path('${bezier.d}')`,
-                      offsetDistance: '0%',
-                      offsetRotate: '0deg',
-                    }}
-                  />
+                  <g pointerEvents="none">
+                    <circle cx="0" cy="0" r="5" fill="#ef4444" opacity="0.9" />
+                    <animateMotion dur="0.8s" repeatCount="indefinite">
+                      <mpath href={`#path-${idx}`} />
+                    </animateMotion>
+                  </g>
                 )}
               </g>
+            )
+          })}
+
+        {/* Hidden path definitions for animateMotion references */}
+        {simulationResult &&
+          edgeStates.map(({ idx, edge, state }) => {
+            if (state !== 'flowing') return null
+            const bezier = getBezierPath(positions, edge)
+            if (!bezier) return null
+            return (
+              <path
+                key={`path-def-${idx}`}
+                id={`path-${idx}`}
+                d={bezier.d}
+                fill="none"
+                stroke="none"
+                pointerEvents="none"
+                style={{ display: 'none' }}
+              />
             )
           })}
 
