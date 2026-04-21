@@ -96,8 +96,10 @@ class Neo4jClient:
 
     async def simulate_disaster(self, node_id: str, depth: int = 5) -> list[dict]:
         depth = max(1, min(depth, 10))  # clamp to safe range
+        # BFS to find all nodes affected by a cascading failure
+        # Follow BOTH directions: upstream dependencies AND downstream dependents
         query = f"""
-        MATCH path = (origin {{id: $node_id}})-[*1..{depth}]->(affected)
+        MATCH path = (origin {{id: $node_id}})-[*1..{depth}]-(affected)
         WHERE origin <> affected
         WITH affected, MIN(length(path)) AS dist
         RETURN affected.id AS id, affected.name AS name, affected.type AS type,
