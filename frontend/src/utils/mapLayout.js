@@ -188,6 +188,33 @@ export function getEdgePath(positions, edge) {
 }
 
 /**
+ * Get edge path as SVG quadratic Bezier curve for smooth, animated propagation
+ * @param {Map} positions - Result from computeLayout
+ * @param {Object} edge - InfraEdge with source and target id
+ * @returns {{x1, y1, x2, y2, d: string, cpX, cpY} | null}
+ */
+export function getBezierPath(positions, edge) {
+  const linear = getEdgePath(positions, edge)
+  if (!linear) return null
+
+  const { x1, y1, x2, y2, midX, midY } = linear
+
+  // Offset control point laterally to create gentle curve
+  // Perpendicular to edge direction, scaled by 0.15x edge length
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const cpX = midX - dy * 0.15
+  const cpY = midY + dx * 0.15
+
+  return {
+    x1, y1, x2, y2,
+    midX, midY,
+    cpX, cpY,
+    d: `M ${x1} ${y1} Q ${cpX} ${cpY} ${x2} ${y2}`,
+  }
+}
+
+/**
  * Get the Euclidean distance between two positioned nodes
  * (used for edge thickness weighting, optional)
  */
