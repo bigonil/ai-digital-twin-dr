@@ -107,7 +107,7 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
 @router.post("/reset/{node_id}")
 async def reset_node(node_id: str, request: Request):
     await request.app.state.neo4j.run(
-        "MATCH (n {id: $id}) SET n.status = 'unknown'", {"id": node_id}
+        "MATCH (n {id: $id}) SET n.status = 'healthy'", {"id": node_id}
     )
     return {"reset": node_id}
 
