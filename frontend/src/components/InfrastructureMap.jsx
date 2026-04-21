@@ -125,20 +125,14 @@ const ANIMATION_STYLES = `
   }
 }
 
-@keyframes particle-flow {
-  0% {
-    offset-distance: 0%;
-    opacity: 0;
+@keyframes particle-pulse {
+  0%, 100% {
+    r: 4;
+    opacity: 0.6;
   }
-  10% {
+  50% {
+    r: 6;
     opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    offset-distance: 100%;
-    opacity: 0;
   }
 }
 
@@ -398,35 +392,19 @@ export default function InfrastructureMap({
                   />
                 )}
 
-                {/* Animated particle flowing along propagation path */}
+                {/* Animated particle pulsing at edge midpoint during flowing */}
                 {state === 'flowing' && (
-                  <g pointerEvents="none">
-                    <circle cx="0" cy="0" r="5" fill="#ef4444" opacity="0.9" />
-                    <animateMotion dur="0.8s" repeatCount="indefinite">
-                      <mpath href={`#path-${idx}`} />
-                    </animateMotion>
-                  </g>
+                  <circle
+                    cx={bezier.midX}
+                    cy={bezier.midY}
+                    r="4"
+                    fill="#ef4444"
+                    opacity="0.8"
+                    pointerEvents="none"
+                    className="particle-pulse"
+                  />
                 )}
               </g>
-            )
-          })}
-
-        {/* Hidden path definitions for animateMotion references */}
-        {simulationResult &&
-          edgeStates.map(({ idx, edge, state }) => {
-            if (state !== 'flowing') return null
-            const bezier = getBezierPath(positions, edge)
-            if (!bezier) return null
-            return (
-              <path
-                key={`path-def-${idx}`}
-                id={`path-${idx}`}
-                d={bezier.d}
-                fill="none"
-                stroke="none"
-                pointerEvents="none"
-                style={{ display: 'none' }}
-              />
             )
           })}
 
