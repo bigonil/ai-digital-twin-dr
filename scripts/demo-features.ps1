@@ -7,34 +7,34 @@ param(
 
 $DemoDelay = 2  # seconds between demo steps
 
-Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  Digital Twin DR Platform — Features Demo" -ForegroundColor Cyan
-Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Cyan
+Write-Host "  Digital Twin DR Platform - Features Demo" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Helper functions
 function Write-Section {
     param([string]$Title)
     Write-Host ""
-    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Blue
+    Write-Host "---------------------------------------------------" -ForegroundColor Blue
     Write-Host $Title -ForegroundColor Blue
-    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Blue
+    Write-Host "---------------------------------------------------" -ForegroundColor Blue
     Write-Host ""
 }
 
 function Write-Info {
     param([string]$Message)
-    Write-Host "ℹ $Message" -ForegroundColor Green
+    Write-Host "i $Message" -ForegroundColor Green
 }
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "✓ $Message" -ForegroundColor Green
+    Write-Host "+ $Message" -ForegroundColor Green
 }
 
-function Write-Error {
+function Write-ErrorMsg {
     param([string]$Message)
-    Write-Host "✗ $Message" -ForegroundColor Red
+    Write-Host "x $Message" -ForegroundColor Red
 }
 
 # Check if server is running
@@ -42,7 +42,7 @@ try {
     $null = Invoke-WebRequest "$BaseUrl/health" -ErrorAction Stop
     Write-Success "Backend is running"
 } catch {
-    Write-Error "Backend not running at $BaseUrl"
+    Write-ErrorMsg "Backend not running at $BaseUrl"
     Write-Host "Start with: docker compose up -d"
     exit 1
 }
@@ -54,7 +54,7 @@ function Get-FirstNode {
         $data = ConvertFrom-Json $response.Content
         return $data.nodes[0].id
     } catch {
-        Write-Error "Failed to get topology"
+        Write-ErrorMsg "Failed to get topology"
         exit 1
     }
 }
@@ -70,10 +70,10 @@ try {
     $compliance = ConvertFrom-Json $response.Content
 
     Write-Success "Compliance audit completed"
-    Write-Host "  📊 Results:"
-    Write-Host "     ✓ Pass: $($compliance.pass_count) nodes"
-    Write-Host "     ⚠ Warning: $($compliance.warning_count) nodes"
-    Write-Host "     ✗ Fail: $($compliance.fail_count) nodes"
+    Write-Host "  Results:"
+    Write-Host "     Pass: $($compliance.pass_count) nodes"
+    Write-Host "     Warning: $($compliance.warning_count) nodes"
+    Write-Host "     Fail: $($compliance.fail_count) nodes"
     Write-Host ""
 
     Write-Info "Retrieving cached report..."
@@ -91,7 +91,7 @@ try {
     $exportResponse.Content | Out-File -FilePath "$env:TEMP\compliance-report.json"
     Write-Success "Exported to: $env:TEMP\compliance-report.json"
 } catch {
-    Write-Error "Compliance demo failed: $_"
+    Write-ErrorMsg "Compliance demo failed: $_"
 }
 
 # 2. WHAT-IF ANALYSIS
@@ -128,13 +128,13 @@ try {
     $whatif = ConvertFrom-Json $response.Content
 
     Write-Success "What-If simulation completed"
-    Write-Host "  📊 Results:"
+    Write-Host "  Results:"
     Write-Host "     Blast Radius Change: $($whatif.blast_radius_delta) nodes"
     Write-Host "     RTO Change: $($whatif.rto_delta_minutes)m"
     Write-Host "     Virtual Nodes Added: $($whatif.virtual_nodes_added)"
     Write-Host "     Virtual Edges Added: $($whatif.virtual_edges_added)"
 } catch {
-    Write-Error "What-If demo failed: $_"
+    Write-ErrorMsg "What-If demo failed: $_"
 }
 
 # 3. CHAOS ENGINEERING
@@ -157,7 +157,7 @@ try {
     $experimentId = $chaos.experiment_id
 
     Write-Success "Experiment created: $experimentId"
-    Write-Host "  📊 Predicted Impact:"
+    Write-Host "  Predicted Impact:"
     Write-Host "     Affected Nodes: $($chaos.simulation.total_affected)"
     Write-Host ""
 
@@ -176,9 +176,9 @@ try {
     $resilience = [math]::Round($result.resilience_score * 100, 0)
 
     Write-Success "Actual results recorded"
-    Write-Host "  📊 Resilience Score: $resilience%"
+    Write-Host "  Resilience Score: $resilience%"
 } catch {
-    Write-Error "Chaos demo failed: $_"
+    Write-ErrorMsg "Chaos demo failed: $_"
 }
 
 # 4. POSTMORTEM ANALYSIS
@@ -189,7 +189,7 @@ Start-Sleep -Seconds $DemoDelay
 
 $incidentDate = (Get-Date -AsUTC).ToString("yyyy-MM-ddTHH:mm:ssZ")
 $postmortemPayload = @{
-    title = "Database Primary Failover — Demo Incident"
+    title = "Database Primary Failover - Demo Incident"
     occurred_at = $incidentDate
     actual_origin_node_id = $OriginNode
     actually_failed_node_ids = @($OriginNode)
@@ -209,12 +209,12 @@ try {
     $recall = [math]::Round($postmortem.prediction_accuracy.recall * 100, 0)
 
     Write-Success "Postmortem report created: $reportId"
-    Write-Host "  📊 Prediction Accuracy:"
+    Write-Host "  Prediction Accuracy:"
     Write-Host "     Overall: $accuracy%"
     Write-Host "     Precision: $precision%"
     Write-Host "     Recall: $recall%"
 } catch {
-    Write-Error "Postmortem demo failed: $_"
+    Write-ErrorMsg "Postmortem demo failed: $_"
 }
 
 # Summary
@@ -222,12 +222,12 @@ Write-Section "SUMMARY"
 
 Write-Host "All 4 features demonstrated successfully!" -ForegroundColor Green
 Write-Host ""
-Write-Host "📖 See the features guide for detailed workflows:"
+Write-Host "Feature guide:"
 Write-Host "   docs/FEATURES.md"
 Write-Host ""
-Write-Host "🌐 Visit the dashboard:"
+Write-Host "Visit the dashboard:"
 Write-Host "   http://localhost:3001"
 Write-Host ""
-Write-Host "📚 API Documentation:"
+Write-Host "API Documentation:"
 Write-Host "   http://localhost:8001/docs"
 Write-Host ""
