@@ -158,13 +158,22 @@ const ANIMATION_STYLES = `
   }
 }
 
+@keyframes dash-flow {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -20;
+  }
+}
+
 .node-activating { animation: pulse-glow 0.8s ease-in-out infinite; }
 .node-healthy { animation: pulse-healthy 2s ease-in-out infinite; }
 .node-failed { animation: pulse-failed 1.5s ease-in-out infinite; }
 .node-idle { animation: node-idle 3s ease-in-out infinite; }
 .edge-flow { stroke-dasharray: 10, 10; animation: flow-animation 1.5s linear infinite; }
 .hop-ring { animation: hop-ring 2s ease-out infinite; }
-.edge-active { animation: edge-active-glow 0.6s ease-in-out infinite; }
+.edge-active { animation: edge-active-glow 0.6s ease-in-out infinite, dash-flow 0.8s linear infinite; }
 .edge-pending { animation: edge-pending-pulse 1.2s ease-in-out infinite; }
 .particle-flow { animation: particle-flow 0.8s linear infinite; }
 `
@@ -288,12 +297,12 @@ export default function InfrastructureMap({
         <defs>
           <style>{ANIMATION_STYLES}</style>
 
-          {/* Arrowhead markers for edge direction */}
-          <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-            <path d="M 0 0 L 8 3 L 0 6 Z" fill="#64748b" />
+          {/* Arrowhead markers for edge direction — larger for visibility */}
+          <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+            <path d="M 0 0 L 12 6 L 0 12 Z" fill="#64748b" opacity="0.9" />
           </marker>
-          <marker id="arrowhead-active" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-            <path d="M 0 0 L 8 3 L 0 6 Z" fill="#ef4444" />
+          <marker id="arrowhead-active" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+            <path d="M 0 0 L 12 6 L 0 12 Z" fill="#ef4444" opacity="1" />
           </marker>
 
           {/* Grid background pattern */}
@@ -324,6 +333,8 @@ export default function InfrastructureMap({
               stroke={edgeStroke}
               strokeWidth={edgeWidth}
               opacity={edgeOpacity}
+              strokeDasharray={inBlastRadius ? '10, 10' : 'none'}
+              className={inBlastRadius ? 'edge-active' : ''}
               markerEnd={inBlastRadius ? 'url(#arrowhead-active)' : 'url(#arrowhead)'}
               pointerEvents="none"
               strokeLinecap="round"

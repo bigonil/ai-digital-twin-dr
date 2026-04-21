@@ -89,8 +89,10 @@ export default function ArchitecturePlanner({ topology }) {
 
         {/* Origin Selection */}
         <div className="mb-6 p-4 bg-dt-surface border border-dt-border rounded">
-          <label className="block text-sm font-mono text-gray-400 mb-2">Origin Node</label>
+          <label htmlFor="origin-node-select" className="block text-sm font-mono text-gray-400 mb-2">Origin Node</label>
           <select
+            id="origin-node-select"
+            name="origin-node"
             value={originNode}
             onChange={e => setOriginNode(e.target.value)}
             className="w-full px-3 py-2 bg-gray-800 border border-dt-border rounded text-gray-100 font-mono text-sm"
@@ -101,8 +103,10 @@ export default function ArchitecturePlanner({ topology }) {
             ))}
           </select>
 
-          <label className="block text-sm font-mono text-gray-400 mt-3 mb-2">Simulation Depth</label>
+          <label htmlFor="depth-range" className="block text-sm font-mono text-gray-400 mt-3 mb-2">Simulation Depth</label>
           <input
+            id="depth-range"
+            name="depth"
             type="range"
             min="1"
             max="10"
@@ -118,6 +122,8 @@ export default function ArchitecturePlanner({ topology }) {
           <h3 className="font-bold text-sm mb-3">Add Virtual Node</h3>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <input
+              id="node-id-input"
+              name="node-id"
               type="text"
               placeholder="Node ID (e.g., replica-db)"
               value={newNodeId}
@@ -125,6 +131,8 @@ export default function ArchitecturePlanner({ topology }) {
               className="px-2 py-1 bg-gray-800 border border-dt-border rounded text-sm text-gray-100"
             />
             <input
+              id="node-name-input"
+              name="node-name"
               type="text"
               placeholder="Node Name"
               value={newNodeName}
@@ -132,6 +140,8 @@ export default function ArchitecturePlanner({ topology }) {
               className="px-2 py-1 bg-gray-800 border border-dt-border rounded text-sm text-gray-100"
             />
             <select
+              id="node-type-select"
+              name="node-type"
               value={newNodeType}
               onChange={e => setNewNodeType(e.target.value)}
               className="px-2 py-1 bg-gray-800 border border-dt-border rounded text-sm text-gray-100"
@@ -142,6 +152,8 @@ export default function ArchitecturePlanner({ topology }) {
               <option>storage</option>
             </select>
             <input
+              id="node-rto-input"
+              name="node-rto"
               type="number"
               placeholder="RTO (minutes)"
               value={newNodeRto}
@@ -179,6 +191,8 @@ export default function ArchitecturePlanner({ topology }) {
           <h3 className="font-bold text-sm mb-3">Add Virtual Edge</h3>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <select
+              id="edge-source-select"
+              name="edge-source"
               value={newEdgeSource}
               onChange={e => setNewEdgeSource(e.target.value)}
               className="px-2 py-1 bg-gray-800 border border-dt-border rounded text-sm text-gray-100"
@@ -189,6 +203,8 @@ export default function ArchitecturePlanner({ topology }) {
               ))}
             </select>
             <select
+              id="edge-target-select"
+              name="edge-target"
               value={newEdgeTarget}
               onChange={e => setNewEdgeTarget(e.target.value)}
               className="px-2 py-1 bg-gray-800 border border-dt-border rounded text-sm text-gray-100"

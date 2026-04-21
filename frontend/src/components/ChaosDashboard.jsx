@@ -202,8 +202,10 @@ export default function ChaosDashboard({ topology }) {
 
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-xs text-gray-400 font-mono mb-2">Actual RTO (minutes)</label>
+                          <label htmlFor="actual-rto-input" className="block text-xs text-gray-400 font-mono mb-2">Actual RTO (minutes)</label>
                           <input
+                            id="actual-rto-input"
+                            name="actual-rto"
                             type="number"
                             value={actualRto}
                             onChange={e => setActualRto(e.target.value)}
@@ -217,6 +219,8 @@ export default function ChaosDashboard({ topology }) {
                             {allNodeIds.map(nid => (
                               <label key={nid} className="flex items-center gap-2 cursor-pointer">
                                 <input
+                                  id={`node-failed-${nid}`}
+                                  name={`node-failed-${nid}`}
                                   type="checkbox"
                                   checked={actualNodes.includes(nid)}
                                   onChange={() => handleToggleActualNode(nid)}
@@ -229,8 +233,10 @@ export default function ChaosDashboard({ topology }) {
                         </div>
 
                         <div>
-                          <label className="block text-xs text-gray-400 font-mono mb-2">Notes</label>
+                          <label htmlFor="actual-notes-input" className="block text-xs text-gray-400 font-mono mb-2">Notes</label>
                           <input
+                            id="actual-notes-input"
+                            name="actual-notes"
                             type="text"
                             value={actualNotes}
                             onChange={e => setActualNotes(e.target.value)}
@@ -280,8 +286,10 @@ export default function ChaosDashboard({ topology }) {
       <div className="max-w-xl space-y-6">
         {/* Node Selection */}
         <div>
-          <label className="block text-sm font-mono text-gray-400 mb-2">Target Node</label>
+          <label htmlFor="target-node-select" className="block text-sm font-mono text-gray-400 mb-2">Target Node</label>
           <select
+            id="target-node-select"
+            name="target-node"
             value={nodeId}
             onChange={e => setNodeId(e.target.value)}
             className="w-full px-3 py-2 bg-gray-800 border border-dt-border rounded text-gray-100"
@@ -298,8 +306,9 @@ export default function ChaosDashboard({ topology }) {
           <label className="block text-sm font-mono text-gray-400 mb-3">Chaos Scenario</label>
           <div className="space-y-2">
             {CHAOS_SCENARIOS.map(scen => (
-              <label key={scen} className="flex items-center gap-3 cursor-pointer p-3 bg-gray-800 rounded hover:bg-gray-700">
+              <label key={scen} htmlFor={`scenario-${scen}`} className="flex items-center gap-3 cursor-pointer p-3 bg-gray-800 rounded hover:bg-gray-700">
                 <input
+                  id={`scenario-${scen}`}
                   type="radio"
                   name="scenario"
                   value={scen}
@@ -324,8 +333,10 @@ export default function ChaosDashboard({ topology }) {
 
         {/* Depth */}
         <div>
-          <label className="block text-sm font-mono text-gray-400 mb-2">Simulation Depth</label>
+          <label htmlFor="chaos-depth-range" className="block text-sm font-mono text-gray-400 mb-2">Simulation Depth</label>
           <input
+            id="chaos-depth-range"
+            name="chaos-depth"
             type="range"
             min="1"
             max="10"
@@ -338,8 +349,10 @@ export default function ChaosDashboard({ topology }) {
 
         {/* Notes */}
         <div>
-          <label className="block text-sm font-mono text-gray-400 mb-2">Notes</label>
+          <label htmlFor="chaos-notes-input" className="block text-sm font-mono text-gray-400 mb-2">Notes</label>
           <input
+            id="chaos-notes-input"
+            name="chaos-notes"
             type="text"
             value={notes}
             onChange={e => setNotes(e.target.value)}
