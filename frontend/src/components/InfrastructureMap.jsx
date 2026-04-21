@@ -167,6 +167,23 @@ const ANIMATION_STYLES = `
   }
 }
 
+@keyframes particle-flow {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
 .node-activating { animation: pulse-glow 0.8s ease-in-out infinite; }
 .node-healthy { animation: pulse-healthy 2s ease-in-out infinite; }
 .node-failed { animation: pulse-failed 1.5s ease-in-out infinite; }
@@ -175,7 +192,7 @@ const ANIMATION_STYLES = `
 .hop-ring { animation: hop-ring 2s ease-out infinite; }
 .edge-active { animation: edge-active-glow 0.6s ease-in-out infinite, dash-flow 0.8s linear infinite; }
 .edge-pending { animation: edge-pending-pulse 1.2s ease-in-out infinite; }
-.particle-flow { animation: particle-flow 0.8s linear infinite; }
+.particle-pulse { animation: particle-pulse 0.6s ease-in-out infinite; }
 `
 
 export default function InfrastructureMap({
@@ -319,6 +336,10 @@ export default function InfrastructureMap({
           const bezier = getBezierPath(positions, edge)
           if (!bezier) return null
 
+          // Get edge state from edgeStates array
+          const edgeState = edgeStates[idx]
+          const { state } = edgeState || { state: 'idle' }
+
           // Check if this edge is in the blast radius
           const inBlastRadius = simulationResult && blastIds.has(edge.source) && blastIds.has(edge.target)
           const edgeStroke = inBlastRadius ? '#ef4444' : '#64748b'
@@ -326,20 +347,37 @@ export default function InfrastructureMap({
           const edgeOpacity = inBlastRadius ? 0.9 : 0.7
 
           return (
-            <path
-              key={`edge-${idx}`}
-              d={bezier.d}
-              fill="none"
-              stroke={edgeStroke}
-              strokeWidth={edgeWidth}
-              opacity={edgeOpacity}
-              strokeDasharray={inBlastRadius ? '10, 10' : 'none'}
-              className={inBlastRadius ? 'edge-active' : ''}
-              markerEnd={inBlastRadius ? 'url(#arrowhead-active)' : 'url(#arrowhead)'}
-              pointerEvents="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <g key={`edge-group-${idx}`}>
+              <path
+                key={`edge-${idx}`}
+                d={bezier.d}
+                fill="none"
+                stroke={edgeStroke}
+                strokeWidth={edgeWidth}
+                opacity={edgeOpacity}
+                strokeDasharray={inBlastRadius ? '10, 10' : 'none'}
+                className={inBlastRadius ? 'edge-active' : ''}
+                markerEnd={inBlastRadius ? 'url(#arrowhead-active)' : 'url(#arrowhead)'}
+                pointerEvents="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Animated particle flowing along edge during propagation */}
+              {state === 'flowing' && (
+                <circle
+                  r="4"
+                  fill="#ef4444"
+                  opacity="0.9"
+                  className="particle-pulse"
+                >
+                  <animateMotion
+                    dur="0.8s"
+                    repeatCount="indefinite"
+                    path={bezier.d}
+                  />
+                </circle>
+              )}
+            </g>
           )
         })}
 
