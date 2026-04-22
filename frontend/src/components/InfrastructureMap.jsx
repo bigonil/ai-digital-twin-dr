@@ -296,12 +296,6 @@ export default function InfrastructureMap({
   const SVG_WIDTH = 900
   const SVG_HEIGHT = 580
 
-  // Collect edges that are within the blast radius (both endpoints in blastIds)
-  const blastEdges = useMemo(() => {
-    if (blastIds.size === 0) return []
-    return topology.edges.filter((e) => blastIds.has(e.source) && blastIds.has(e.target))
-  }, [topology.edges, blastIds])
-
   return (
     <div className="w-full h-full relative bg-dt-bg overflow-hidden flex items-center justify-center">
       <svg
@@ -331,50 +325,65 @@ export default function InfrastructureMap({
         {/* Background grid */}
         <rect width={SVG_WIDTH} height={SVG_HEIGHT} fill="url(#grid)" />
 
-        {/* Base layer: All topology edges with Bezier curves (always visible, directional) */}
+        {/* Edge layer: state-driven rendering (idle / pending / flowing / burned) */}
         {topology.edges.map((edge, idx) => {
           const bezier = getBezierPath(positions, edge)
           if (!bezier) return null
 
-          // Get edge state from edgeStates array
-          const edgeState = edgeStates[idx]
-          const { state } = edgeState || { state: 'idle' }
+          const { state } = edgeStates[idx] || { state: 'idle' }
 
-          // Check if this edge is in the blast radius
-          const inBlastRadius = simulationResult && blastIds.has(edge.source) && blastIds.has(edge.target)
-          const edgeStroke = inBlastRadius ? '#ef4444' : '#64748b'
-          const edgeWidth = inBlastRadius ? 3 : 2
-          const edgeOpacity = inBlastRadius ? 0.9 : 0.7
+          // Per-state visual properties
+          let stroke, strokeWidth, opacity, dashArray, className, marker
+          if (state === 'flowing') {
+            stroke = '#ef4444'
+            strokeWidth = 3
+            opacity = 1
+            dashArray = '8, 8'
+            className = 'edge-active'
+            marker = 'url(#arrowhead-active)'
+          } else if (state === 'pending') {
+            stroke = '#f97316'  // orange
+            strokeWidth = 2
+            opacity = 0.7
+            dashArray = '6, 6'
+            className = 'edge-pending'
+            marker = 'url(#arrowhead)'
+          } else if (state === 'burned') {
+            stroke = '#991b1b'  // dark red
+            strokeWidth = 2
+            opacity = 0.85
+            dashArray = 'none'
+            className = ''
+            marker = 'url(#arrowhead-active)'
+          } else {
+            // idle — always-visible base layer
+            stroke = '#64748b'
+            strokeWidth = 1.5
+            opacity = 0.55
+            dashArray = 'none'
+            className = ''
+            marker = 'url(#arrowhead)'
+          }
 
           return (
             <g key={`edge-group-${idx}`}>
               <path
-                key={`edge-${idx}`}
                 d={bezier.d}
                 fill="none"
-                stroke={edgeStroke}
-                strokeWidth={edgeWidth}
-                opacity={edgeOpacity}
-                strokeDasharray={inBlastRadius ? '10, 10' : 'none'}
-                className={inBlastRadius ? 'edge-active' : ''}
-                markerEnd={inBlastRadius ? 'url(#arrowhead-active)' : 'url(#arrowhead)'}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                opacity={opacity}
+                strokeDasharray={dashArray}
+                className={className}
+                markerEnd={marker}
                 pointerEvents="none"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               {/* Animated particle flowing along edge during propagation */}
               {state === 'flowing' && (
-                <circle
-                  r="4"
-                  fill="#ef4444"
-                  opacity="0.9"
-                  className="particle-pulse"
-                >
-                  <animateMotion
-                    dur="0.8s"
-                    repeatCount="indefinite"
-                    path={bezier.d}
-                  />
+                <circle r="4" fill="#ef4444" opacity="0.9" className="particle-pulse">
+                  <animateMotion dur="0.8s" repeatCount="indefinite" path={bezier.d} />
                 </circle>
               )}
             </g>
