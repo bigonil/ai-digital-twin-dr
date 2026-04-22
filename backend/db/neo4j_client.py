@@ -84,13 +84,13 @@ class Neo4jClient:
 
     async def get_topology(self) -> dict[str, Any]:
         nodes = await self.run(
-            "MATCH (n) RETURN n.id AS id, n.name AS name, n.type AS type, "
+            "MATCH (n:InfraNode) RETURN n.id AS id, n.name AS name, n.type AS type, "
             "n.status AS status, n.provider AS provider, n.region AS region, "
             "n.is_redundant AS is_redundant, n.rto_minutes AS rto_minutes, "
             "n.rpo_minutes AS rpo_minutes, labels(n) AS labels"
         )
         edges = await self.run(
-            "MATCH (a)-[r]->(b) RETURN a.id AS source, b.id AS target, type(r) AS type, r.weight AS weight"
+            "MATCH (a:InfraNode)-[r]->(b:InfraNode) RETURN a.id AS source, b.id AS target, type(r) AS type, r.weight AS weight"
         )
         return {"nodes": nodes, "edges": edges}
 
