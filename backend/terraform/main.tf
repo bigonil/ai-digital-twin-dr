@@ -154,7 +154,8 @@ resource "aws_db_subnet_group" "postgres_secondary" {
   subnet_ids = [aws_subnet.secondary_private_a.id, aws_subnet.secondary_private_b.id]
 }
 
-# Secondary RDS cluster with global database
+# Secondary RDS cluster — read replica of primary (cross-region failover)
+# DEPENDS_ON: aws_rds_cluster.postgres (primary region)
 resource "aws_rds_cluster" "postgres_secondary" {
   provider             = aws.secondary
   cluster_identifier   = "postgres-secondary"

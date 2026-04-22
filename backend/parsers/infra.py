@@ -23,7 +23,7 @@ PROVIDER_MAP: dict[str, CloudProvider] = {
 }
 
 REDUNDANCY_TYPES = {
-    "aws_rds_cluster", "aws_elasticache_replication_group",
+    "aws_rds_cluster", "aws_rds_cluster_instance", "aws_elasticache_replication_group",
     "aws_lb", "aws_autoscaling_group", "google_compute_instance_group_manager",
     "azurerm_availability_set",
 }
