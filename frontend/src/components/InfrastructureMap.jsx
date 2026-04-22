@@ -172,10 +172,10 @@ const ANIMATION_STYLES = `
     offset-distance: 0%;
     opacity: 0;
   }
-  10% {
+  5% {
     opacity: 1;
   }
-  90% {
+  95% {
     opacity: 1;
   }
   100% {
@@ -193,6 +193,7 @@ const ANIMATION_STYLES = `
 .edge-active { animation: edge-active-glow 0.6s ease-in-out infinite, dash-flow 0.8s linear infinite; }
 .edge-pending { animation: edge-pending-pulse 1.2s ease-in-out infinite; }
 .particle-pulse { animation: particle-pulse 0.6s ease-in-out infinite; }
+.particle-flow { animation: particle-flow 0.8s ease-in-out infinite; }
 `
 
 export default function InfrastructureMap({
@@ -382,9 +383,9 @@ export default function InfrastructureMap({
               />
               {/* Animated particle flowing along edge during propagation */}
               {state === 'flowing' && (
-                <circle r="4" fill="#ef4444" opacity="0.9" className="particle-pulse">
-                  <animateMotion dur="0.8s" repeatCount="indefinite" path={bezier.d} />
-                </circle>
+                <g style={{ offsetPath: `path('${bezier.d}')`, offsetDistance: '0%' }}>
+                  <circle r="4" fill="#ef4444" opacity="0.9" className="particle-flow" />
+                </g>
               )}
             </g>
           )
