@@ -23,10 +23,42 @@ PROVIDER_MAP: dict[str, CloudProvider] = {
 }
 
 REDUNDANCY_TYPES = {
-    "aws_rds_cluster", "aws_elasticache_replication_group",
+    "aws_rds_cluster", "aws_rds_cluster_instance", "aws_elasticache_replication_group",
     "aws_lb", "aws_autoscaling_group", "google_compute_instance_group_manager",
     "azurerm_availability_set",
 }
+
+# RTO/RPO defaults by resource type (in minutes)
+RTO_RPO_MAP = {
+    # Databases: low RTO/RPO with replication
+    "aws_rds_cluster": (5, 1),
+    "aws_rds_cluster_instance": (5, 1),
+    "aws_db_instance": (10, 2),
+    "azurerm_mssql_server": (10, 2),
+    # Caching: very low RTO/RPO
+    "aws_elasticache_cluster": (3, 1),
+    "aws_elasticache_replication_group": (3, 1),
+    # Load balancing & auto-scaling: fast recovery
+    "aws_lb": (2, 0),
+    "aws_autoscaling_group": (5, 1),
+    # Compute: moderate RTO/RPO
+    "aws_instance": (30, 10),
+    "aws_lambda_function": (5, 1),
+    "aws_ecs_service": (10, 2),
+    # Storage: longer RTO, depends on backup
+    "aws_s3_bucket": (60, 30),
+    "aws_ebs_volume": (15, 5),
+    # Networking: very fast
+    "aws_vpc": (1, 0),
+    "aws_subnet": (1, 0),
+    "aws_security_group": (1, 0),
+    # Default for unknown types
+}
+
+
+def _get_rto_rpo(resource_type: str) -> tuple[int, int]:
+    """Return (RTO, RPO) in minutes for a resource type."""
+    return RTO_RPO_MAP.get(resource_type, (60, 30))  # default: 60min RTO, 30min RPO
 
 
 def _node_id(resource_type: str, resource_name: str) -> str:
@@ -86,6 +118,7 @@ def parse_directory(terraform_dir: str | Path) -> tuple[list[InfraNode], list[In
             for resource_type, instances in resource_block.items():
                 for resource_name, config in instances.items():
                     node_id = _node_id(resource_type, resource_name)
+                    rto, rpo = _get_rto_rpo(resource_type)
                     node = InfraNode(
                         id=node_id,
                         name=resource_name,
@@ -93,8 +126,10 @@ def parse_directory(terraform_dir: str | Path) -> tuple[list[InfraNode], list[In
                         provider=_detect_provider(resource_type),
                         region=_extract_region(config),
                         az=_extract_az(config),
-                        status=ResourceStatus.unknown,
+                        status=ResourceStatus.healthy,
                         is_redundant=resource_type in REDUNDANCY_TYPES,
+                        rto_minutes=rto,
+                        rpo_minutes=rpo,
                         properties={
                             "source_file": str(tf_file.relative_to(base)),
                             "terraform_resource": f"{resource_type}.{resource_name}",

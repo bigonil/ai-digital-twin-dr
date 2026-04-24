@@ -84,10 +84,17 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
     rtos = [a.estimated_rto_minutes for a in affected if a.estimated_rto_minutes]
     rpos = [a.estimated_rpo_minutes for a in affected if a.estimated_rpo_minutes]
 
+    # Mark origin node and all affected nodes as simulated_failure in Neo4j
     await request.app.state.neo4j.run(
         "MATCH (n {id: $id}) SET n.status = 'simulated_failure'",
         {"id": body.node_id},
     )
+
+    for node in affected:
+        await request.app.state.neo4j.run(
+            "MATCH (n {id: $id}) SET n.status = 'simulated_failure'",
+            {"id": node.id},
+        )
 
     return SimulationWithTimeline(
         origin_node_id=body.node_id,
@@ -105,7 +112,7 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
 @router.post("/reset/{node_id}")
 async def reset_node(node_id: str, request: Request):
     await request.app.state.neo4j.run(
-        "MATCH (n {id: $id}) SET n.status = 'unknown'", {"id": node_id}
+        "MATCH (n {id: $id}) SET n.status = 'healthy'", {"id": node_id}
     )
     return {"reset": node_id}
 
