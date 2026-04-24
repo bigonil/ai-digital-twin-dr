@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RecoveryStrategy(str, Enum):
@@ -39,8 +39,7 @@ class EnhancedInfraNode(BaseModel):
     monitoring_state: MonitoringState = MonitoringState.UNKNOWN
     observed_latency_ms: Optional[int] = None
 
-    class Config:
-        use_enum_values = False
+    model_config = ConfigDict(use_enum_values=False)
 
 
 class EnhancedAffectedNode(BaseModel):
@@ -58,8 +57,7 @@ class EnhancedAffectedNode(BaseModel):
     monitoring_state: MonitoringState
     at_risk: bool = False
 
-    class Config:
-        use_enum_values = False
+    model_config = ConfigDict(use_enum_values=False)
 
 
 class TimelineStep(BaseModel):
