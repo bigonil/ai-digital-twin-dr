@@ -116,4 +116,4 @@ async def run_whatif_simulation(body: WhatIfRequest, request: Request):
 
     finally:
         # Cleanup: delete all virtual nodes
-        await neo4j.run("MATCH (n) WHERE n.id STARTS WITH 'virtual-' DETACH DELETE n")
+        await neo4j.run("MATCH (n:InfraNode) WHERE n.id STARTS WITH 'virtual-' DETACH DELETE n")

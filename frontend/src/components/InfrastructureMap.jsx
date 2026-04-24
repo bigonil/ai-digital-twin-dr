@@ -167,22 +167,6 @@ const ANIMATION_STYLES = `
   }
 }
 
-@keyframes particle-flow {
-  0% {
-    offset-distance: 0%;
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  95% {
-    opacity: 1;
-  }
-  100% {
-    offset-distance: 100%;
-    opacity: 0;
-  }
-}
 
 .node-activating { animation: pulse-glow 0.8s ease-in-out infinite; }
 .node-healthy { animation: pulse-healthy 2s ease-in-out infinite; }
@@ -193,7 +177,6 @@ const ANIMATION_STYLES = `
 .edge-active { animation: edge-active-glow 0.6s ease-in-out infinite, dash-flow 0.8s linear infinite; }
 .edge-pending { animation: edge-pending-pulse 1.2s ease-in-out infinite; }
 .particle-pulse { animation: particle-pulse 0.6s ease-in-out infinite; }
-.particle-flow { animation: particle-flow 0.8s ease-in-out infinite; }
 `
 
 export default function InfrastructureMap({
@@ -332,6 +315,7 @@ export default function InfrastructureMap({
           if (!bezier) return null
 
           const { state } = edgeStates[idx] || { state: 'idle' }
+          const edgePathId = `edge-path-${idx}`
 
           // Per-state visual properties
           let stroke, strokeWidth, opacity, dashArray, className, marker
@@ -368,6 +352,12 @@ export default function InfrastructureMap({
 
           return (
             <g key={`edge-group-${idx}`}>
+              {/* Define path for animateMotion reference */}
+              <defs>
+                <path id={edgePathId} d={bezier.d} />
+              </defs>
+
+              {/* Edge stroke */}
               <path
                 d={bezier.d}
                 fill="none"
@@ -381,10 +371,20 @@ export default function InfrastructureMap({
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
+
               {/* Animated particle flowing along edge during propagation */}
               {state === 'flowing' && (
-                <g style={{ offsetPath: `path('${bezier.d}')`, offsetDistance: '0%' }}>
-                  <circle r="4" fill="#ef4444" opacity="0.9" className="particle-flow" />
+                <g>
+                  <animateMotion
+                    dur="0.8s"
+                    repeatCount="indefinite"
+                    keyPoints="0;1"
+                    keyTimes="0;1"
+                    calcMode="linear"
+                  >
+                    <mpath href={`#${edgePathId}`} />
+                    <circle r="4" fill="#ef4444" opacity="0.9" className="particle-pulse" />
+                  </animateMotion>
                 </g>
               )}
             </g>

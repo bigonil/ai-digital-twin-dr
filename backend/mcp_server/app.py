@@ -199,7 +199,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     if name == "get_recovery_plan":
         target = arguments["target"]
         node_rows = await neo4j.run(
-            "MATCH (n {id: $id}) RETURN n.name AS name, n.type AS type, "
+            "MATCH (n:InfraNode {id: $id}) RETURN n.name AS name, n.type AS type, "
             "n.rto_minutes AS rto, n.rpo_minutes AS rpo",
             {"id": target},
         )

@@ -19,9 +19,9 @@ async def _run_compliance_audit(request: Request) -> ComplianceReport:
     rto_threshold = settings.dr_rto_threshold_minutes  # 60
     rpo_threshold = settings.dr_rpo_threshold_minutes  # 15
 
-    # Fetch all nodes
+    # Fetch all infrastructure nodes (exclude Document nodes)
     all_nodes = await request.app.state.neo4j.run(
-        "MATCH (n) RETURN n.id AS id, n.name AS name, n.type AS type, "
+        "MATCH (n:InfraNode) RETURN n.id AS id, n.name AS name, n.type AS type, "
         "n.rto_minutes AS rto_minutes, n.rpo_minutes AS rpo_minutes"
     )
 
