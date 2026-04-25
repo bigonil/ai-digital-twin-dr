@@ -302,3 +302,149 @@ def test_bfs_depth_limit():
     assert "A" in affected
     assert "B" in affected
     assert "C" not in affected
+
+
+from backend.algorithms.rto_rpo_calculator import (
+    calculate_effective_rto,
+    calculate_effective_rpo,
+    apply_monitoring_state_impact,
+)
+
+def test_rto_replica_fallback_healthy_replica():
+    """
+    replica_fallback with healthy replica: use replica's RTO.
+    """
+    node = {
+        "id": "primary",
+        "rto_minutes": 15,
+        "recovery_strategy": "replica_fallback",
+        "recovery_rules": {"fallback_rto_multiplier": 2.0},
+    }
+    replicas = [
+        {"id": "replica_1", "rto_minutes": 5},
+        {"id": "replica_2", "rto_minutes": 7},
+    ]
+    affected_node_ids = set()  # No affected nodes
+
+    effective_rto = calculate_effective_rto(node, replicas, affected_node_ids)
+    assert effective_rto == 5  # min(replica RTOs)
+
+def test_rto_replica_fallback_degraded_replicas():
+    """
+    replica_fallback with degraded replicas: use node.rto × 1.5.
+    """
+    node = {
+        "id": "primary",
+        "rto_minutes": 15,
+        "recovery_strategy": "replica_fallback",
+        "recovery_rules": {"fallback_rto_multiplier": 2.0},
+    }
+    replicas = [
+        {"id": "replica_1", "rto_minutes": 5},
+    ]
+    affected_node_ids = {"replica_1"}  # Replica is affected
+
+    effective_rto = calculate_effective_rto(node, replicas, affected_node_ids)
+    assert effective_rto == 15 * 1.5  # 22.5
+
+def test_rto_replica_fallback_no_replica():
+    """
+    replica_fallback without replicas: use node.rto × fallback_rto_multiplier.
+    """
+    node = {
+        "id": "primary",
+        "rto_minutes": 15,
+        "recovery_strategy": "replica_fallback",
+        "recovery_rules": {"fallback_rto_multiplier": 3.0},
+    }
+    replicas = []
+    affected_node_ids = set()
+
+    effective_rto = calculate_effective_rto(node, replicas, affected_node_ids)
+    assert effective_rto == 15 * 3.0  # 45
+
+def test_rto_multi_az():
+    """
+    multi_az: fast failover, use node.rto × 0.5.
+    """
+    node = {
+        "id": "lb",
+        "rto_minutes": 10,
+        "recovery_strategy": "multi_az",
+    }
+    replicas = []
+    affected_node_ids = set()
+
+    effective_rto = calculate_effective_rto(node, replicas, affected_node_ids)
+    assert effective_rto == 10 * 0.5  # 5
+
+def test_rto_stateless():
+    """
+    stateless: quick spinup, use node.rto × 0.5.
+    """
+    node = {
+        "id": "lambda",
+        "rto_minutes": 2,
+        "recovery_strategy": "stateless",
+    }
+    replicas = []
+    affected_node_ids = set()
+
+    effective_rto = calculate_effective_rto(node, replicas, affected_node_ids)
+    assert effective_rto == 2 * 0.5  # 1
+
+def test_rto_generic():
+    """
+    generic: use static RTO.
+    """
+    node = {
+        "id": "instance",
+        "rto_minutes": 20,
+        "recovery_strategy": "generic",
+    }
+    replicas = []
+    affected_node_ids = set()
+
+    effective_rto = calculate_effective_rto(node, replicas, affected_node_ids)
+    assert effective_rto == 20  # Static
+
+def test_rpo_with_replication_lag():
+    """
+    RPO affected by replication lag: effective_rpo = node.rpo + (lag_seconds / 60).
+    """
+    node = {
+        "id": "primary",
+        "rpo_minutes": 1,
+    }
+    replication_lag_seconds = 30
+
+    effective_rpo = calculate_effective_rpo(node, replication_lag_seconds)
+    assert effective_rpo == 1 + (30 / 60)  # 1.5
+
+def test_monitoring_state_degraded():
+    """
+    degraded monitoring state: multiply RTO by 1.5 and set at_risk=True.
+    """
+    node = {
+        "id": "instance",
+        "rto_minutes": 10,
+        "monitoring_state": "degraded",
+    }
+
+    effective_rto, at_risk = apply_monitoring_state_impact(node, 10)
+    assert effective_rto == 10 * 1.5  # 15
+    assert at_risk is True
+
+def test_monitoring_state_healthy():
+    """
+    healthy monitoring state: no impact.
+    """
+    node = {
+        "id": "instance",
+        "rto_minutes": 10,
+        "monitoring_state": "healthy",
+    }
+
+    effective_rto, at_risk = apply_monitoring_state_impact(node, 10)
+    assert effective_rto == 10
+    assert at_risk is False
