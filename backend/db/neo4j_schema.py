@@ -89,8 +89,14 @@ async def ensure_node_properties(neo4j_session, node_id: str, defaults: dict) ->
     Args:
         neo4j_session: Neo4j session
         node_id: Node ID
-        defaults: Dict of default values {property: value}
+        defaults: Dict of default values {property: value} - property names must be valid InfraNode properties
     """
+    # Validate that all property names are known/safe
+    valid_properties = set(INFRA_NODE_PROPERTIES.keys())
+    for key in defaults.keys():
+        if key not in valid_properties:
+            raise ValueError(f"Invalid property '{key}' for InfraNode. Valid properties: {valid_properties}")
+
     properties_set = []
     for key, value in defaults.items():
         if value is not None:
@@ -109,9 +115,20 @@ async def ensure_edge_properties(neo4j_session, edge_type: str, defaults: dict) 
 
     Args:
         neo4j_session: Neo4j session
-        edge_type: Type of relationship
-        defaults: Dict of default values {property: value}
+        edge_type: Type of relationship - must be a valid edge type (REPLICATES_TO, CALLS, etc.)
+        defaults: Dict of default values {property: value} - property names must be valid edge properties
     """
+    # Validate that edge_type is known/safe
+    valid_edge_types = set(LATENCY_DEFAULTS.keys())
+    if edge_type not in valid_edge_types:
+        raise ValueError(f"Invalid edge type '{edge_type}'. Valid types: {valid_edge_types}")
+
+    # Validate that all property names are known/safe
+    valid_properties = set(EDGE_PROPERTIES.keys())
+    for key in defaults.keys():
+        if key not in valid_properties:
+            raise ValueError(f"Invalid property '{key}' for edges. Valid properties: {valid_properties}")
+
     properties_set = []
     for key, value in defaults.items():
         if value is not None:
