@@ -140,3 +140,61 @@ def test_latency_inference_rules():
     assert LATENCY_INFERENCE_RULES["rds_to_rds"] == "REPLICATES_TO"
     assert "lambda_to_rds" in LATENCY_INFERENCE_RULES
     assert LATENCY_INFERENCE_RULES["lambda_to_rds"] == "CALLS"
+
+
+from backend.parsers.strategy_inference import (
+    infer_recovery_strategy,
+    infer_edge_type,
+    infer_recovery_rules,
+    get_default_latency,
+)
+
+
+def test_infer_recovery_strategy():
+    """Verify recovery strategy inference from resource type"""
+    assert infer_recovery_strategy("aws_rds_cluster") == "replica_fallback"
+    assert infer_recovery_strategy("aws_rds_instance") == "replica_fallback"
+    assert infer_recovery_strategy("aws_alb") == "multi_az"
+    assert infer_recovery_strategy("aws_lambda_function") == "stateless"
+    assert infer_recovery_strategy("aws_ec2_instance") == "generic"
+    assert infer_recovery_strategy("unknown_type") == "generic"  # Default
+
+
+def test_infer_edge_type():
+    """Verify edge type inference from source and target types"""
+    # RDS to RDS = REPLICATES_TO
+    assert infer_edge_type("aws_rds_cluster", "aws_rds_cluster") == "REPLICATES_TO"
+
+    # Lambda/Instance to RDS = CALLS
+    assert infer_edge_type("aws_lambda_function", "aws_rds_cluster") == "CALLS"
+    assert infer_edge_type("aws_instance", "aws_rds_cluster") == "CALLS"
+
+    # ALB to Instance = ROUTES_TO
+    assert infer_edge_type("aws_alb", "aws_instance") == "ROUTES_TO"
+
+    # Default = DEPENDS_ON
+    assert infer_edge_type("aws_s3_bucket", "aws_lambda_function") == "DEPENDS_ON"
+
+
+def test_infer_recovery_rules():
+    """Verify recovery rules inference"""
+    # replica_fallback with replicas
+    rules = infer_recovery_rules("replica_fallback", has_replica=True, has_backup=False)
+    assert rules["fallback_rto_multiplier"] == 2.0
+
+    # replica_fallback without replicas
+    rules = infer_recovery_rules("replica_fallback", has_replica=False, has_backup=False)
+    assert rules["fallback_rto_multiplier"] == 3.0
+
+    # multi_az
+    rules = infer_recovery_rules("multi_az", has_replica=False, has_backup=False)
+    assert "fallback_rto_multiplier" in rules or rules == {}
+
+
+def test_get_default_latency():
+    """Verify latency defaults per edge type"""
+    assert get_default_latency("REPLICATES_TO") == 1000
+    assert get_default_latency("CALLS") == 100
+    assert get_default_latency("ROUTES_TO") == 50
+    assert get_default_latency("DEPENDS_ON") == 100
+    assert get_default_latency("UNKNOWN_TYPE") == 100  # Default
