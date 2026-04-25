@@ -198,3 +198,107 @@ def test_get_default_latency():
     assert get_default_latency("ROUTES_TO") == 50
     assert get_default_latency("DEPENDS_ON") == 100
     assert get_default_latency("UNKNOWN_TYPE") == 100  # Default
+
+
+from backend.algorithms.cascading_failure import bfs_with_latency
+
+
+def test_bfs_latency_accumulation():
+    """
+    Verify BFS accumulates latency per hop, not linear.
+
+    Scenario: A → B (CALLS: 100ms) → C (REPLICATES_TO: 1000ms)
+    Expected step_time_ms: A=0, B=100, C=1100
+    """
+    # Mock graph structure
+    nodes = {
+        "A": {"id": "A", "name": "Node A"},
+        "B": {"id": "B", "name": "Node B"},
+        "C": {"id": "C", "name": "Node C"},
+    }
+    edges = {
+        "A": [{"target": "B", "latency_ms": 100, "shares_resource": False, "contention_factor": 1.0}],
+        "B": [{"target": "C", "latency_ms": 1000, "shares_resource": False, "contention_factor": 1.0}],
+        "C": [],
+    }
+
+    def get_outgoing_edges_fn(node_id):
+        return edges.get(node_id, [])
+
+    def get_node_details_fn(node_id):
+        return nodes.get(node_id)
+
+    affected = bfs_with_latency("A", depth=5,
+                                 get_outgoing_edges_fn=get_outgoing_edges_fn,
+                                 get_node_details_fn=get_node_details_fn)
+
+    assert affected["A"]["step_time_ms"] == 0
+    assert affected["B"]["step_time_ms"] == 100
+    assert affected["C"]["step_time_ms"] == 1100
+
+
+def test_bfs_contention_factor():
+    """
+    Verify contention factor multiplies latency when resource already affected.
+
+    Scenario: A → B (latency=100, no contention)
+            A → C (latency=100, shares_resource=True, contention_factor=1.5)
+
+    If B is already affected and C shares resource:
+    Expected: C.step_time_ms = 100 × 1.5 = 150
+    """
+    nodes = {
+        "A": {"id": "A", "name": "Node A"},
+        "B": {"id": "B", "name": "Node B"},
+        "C": {"id": "C", "name": "Node C"},
+    }
+    edges = {
+        "A": [
+            {"target": "B", "latency_ms": 100, "shares_resource": False, "contention_factor": 1.0},
+            {"target": "C", "latency_ms": 100, "shares_resource": True, "contention_factor": 1.5},
+        ],
+        "B": [],
+        "C": [],
+    }
+
+    def get_outgoing_edges_fn(node_id):
+        return edges.get(node_id, [])
+
+    def get_node_details_fn(node_id):
+        return nodes.get(node_id)
+
+    affected = bfs_with_latency("A", depth=5,
+                                 get_outgoing_edges_fn=get_outgoing_edges_fn,
+                                 get_node_details_fn=get_node_details_fn)
+
+    # B is affected, so C's contention factor applies: 100 × 1.5 = 150
+    assert affected["C"]["step_time_ms"] == 150
+
+
+def test_bfs_depth_limit():
+    """Verify BFS respects depth limit"""
+    nodes = {
+        "A": {"id": "A", "name": "Node A"},
+        "B": {"id": "B", "name": "Node B"},
+        "C": {"id": "C", "name": "Node C"},
+    }
+    edges = {
+        "A": [{"target": "B", "latency_ms": 100, "shares_resource": False, "contention_factor": 1.0}],
+        "B": [{"target": "C", "latency_ms": 100, "shares_resource": False, "contention_factor": 1.0}],
+        "C": [],
+    }
+
+    def get_outgoing_edges_fn(node_id):
+        return edges.get(node_id, [])
+
+    def get_node_details_fn(node_id):
+        return nodes.get(node_id)
+
+    # depth=1: only A and B
+    affected = bfs_with_latency("A", depth=1,
+                                 get_outgoing_edges_fn=get_outgoing_edges_fn,
+                                 get_node_details_fn=get_node_details_fn)
+
+    assert "A" in affected
+    assert "B" in affected
+    assert "C" not in affected
