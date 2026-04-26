@@ -79,6 +79,121 @@ def _extract_az(config: dict[str, Any]) -> str | None:
     return config.get("availability_zone") or config.get("zone") or None
 
 
+def _extract_resources(directory: str | Path) -> list[dict[str, Any]]:
+    """
+    Phase 1: Extract resources from Terraform files using hcl2 parsing.
+    Returns raw resource dictionaries with metadata.
+    """
+    base = Path(directory)
+    resources: list[dict[str, Any]] = []
+
+    tf_files = list(base.rglob("*.tf"))
+    log.info("terraform.phase1_extract_start", directory=str(base), file_count=len(tf_files))
+
+    for tf_file in tf_files:
+        try:
+            with open(tf_file, "r", encoding="utf-8") as fh:
+                parsed = hcl2.load(fh)
+        except Exception as exc:
+            log.warning("terraform.phase1_extract_error", file=str(tf_file), error=str(exc))
+            continue
+
+        for resource_block in parsed.get("resource", []):
+            for resource_type, instances in resource_block.items():
+                for resource_name, config in instances.items():
+                    resources.append({
+                        "type": resource_type,
+                        "name": resource_name,
+                        "config": config,
+                        "source_file": str(tf_file.relative_to(base)),
+                    })
+
+    log.info("terraform.phase1_extract_done", resource_count=len(resources))
+    return resources
+
+
+def _infer_strategies(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Phase 2: Infer recovery strategy.
+    (Stub for Phase 1 - will be implemented in Task 7)
+    """
+    return resources
+
+
+def _infer_edges(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Phase 3: Infer edge types and references.
+    (Stub for Phase 1 - will be implemented in Task 7)
+    """
+    return []
+
+
+def _set_default_latencies(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Phase 4: Set default latencies for edges.
+    (Stub for Phase 1 - will be implemented in Task 7)
+    """
+    return edges
+
+
+def _infer_all_recovery_rules(resources: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Phase 5: Infer recovery rules.
+    (Stub for Phase 1 - will be implemented in Task 7)
+    """
+    return resources
+
+
+def _build_infra_nodes(resources: list[dict[str, Any]], edges: list[dict[str, Any]]) -> tuple[list[InfraNode], list[InfraEdge]]:
+    """
+    Phase 6: Create Neo4j objects from processed resources.
+    """
+    nodes: list[InfraNode] = []
+    edge_list: list[InfraEdge] = []
+
+    for resource in resources:
+        resource_type = resource["type"]
+        resource_name = resource["name"]
+        config = resource["config"]
+        tf_file = resource["source_file"]
+
+        node_id = _node_id(resource_type, resource_name)
+        rto, rpo = _get_rto_rpo(resource_type)
+
+        node = InfraNode(
+            id=node_id,
+            name=resource_name,
+            type=resource_type,
+            provider=_detect_provider(resource_type),
+            region=_extract_region(config),
+            az=_extract_az(config),
+            status=ResourceStatus.healthy,
+            is_redundant=resource_type in REDUNDANCY_TYPES,
+            rto_minutes=rto,
+            rpo_minutes=rpo,
+            properties={
+                "source_file": tf_file,
+                "terraform_resource": f"{resource_type}.{resource_name}",
+            },
+            labels=["InfraNode", resource_type],
+        )
+        nodes.append(node)
+
+        # Extract references from config for edges
+        for ref_id in _find_references(config, node_id):
+            edge_list.append(InfraEdge(source=node_id, target=ref_id, type="DEPENDS_ON"))
+
+    # Add edges from Phase 3 if any
+    for edge in edges:
+        edge_list.append(InfraEdge(
+            source=edge.get("source"),
+            target=edge.get("target"),
+            type=edge.get("type", "DEPENDS_ON"),
+        ))
+
+    return nodes, edge_list
+
+
 def _find_references(value: Any, current_id: str) -> list[str]:
     """Recursively hunt for ${resource_type.resource_name.*} references."""
     refs: list[str] = []
@@ -98,51 +213,38 @@ def _find_references(value: Any, current_id: str) -> list[str]:
 
 
 def parse_directory(terraform_dir: str | Path) -> tuple[list[InfraNode], list[InfraEdge]]:
-    """Parse all .tf files in a directory tree."""
-    base = Path(terraform_dir)
-    nodes: dict[str, InfraNode] = {}
-    edges: list[InfraEdge] = []
+    """
+    Six-phase Terraform parsing pipeline.
 
-    tf_files = list(base.rglob("*.tf"))
-    log.info("terraform.parse_start", directory=str(base), file_count=len(tf_files))
+    Phase 1: Extract resources from Terraform files
+    Phase 2: Infer recovery strategies (stub in Phase 1)
+    Phase 3: Infer edge types (stub in Phase 1)
+    Phase 4: Set default latencies (stub in Phase 1)
+    Phase 5: Infer recovery rules (stub in Phase 1)
+    Phase 6: Create Neo4j objects
+    """
+    log.info("terraform.parse_start", directory=str(terraform_dir))
 
-    for tf_file in tf_files:
-        try:
-            with open(tf_file, "r", encoding="utf-8") as fh:
-                parsed = hcl2.load(fh)
-        except Exception as exc:
-            log.warning("terraform.parse_error", file=str(tf_file), error=str(exc))
-            continue
+    # Phase 1: Extract resources
+    resources = _extract_resources(terraform_dir)
 
-        for resource_block in parsed.get("resource", []):
-            for resource_type, instances in resource_block.items():
-                for resource_name, config in instances.items():
-                    node_id = _node_id(resource_type, resource_name)
-                    rto, rpo = _get_rto_rpo(resource_type)
-                    node = InfraNode(
-                        id=node_id,
-                        name=resource_name,
-                        type=resource_type,
-                        provider=_detect_provider(resource_type),
-                        region=_extract_region(config),
-                        az=_extract_az(config),
-                        status=ResourceStatus.healthy,
-                        is_redundant=resource_type in REDUNDANCY_TYPES,
-                        rto_minutes=rto,
-                        rpo_minutes=rpo,
-                        properties={
-                            "source_file": str(tf_file.relative_to(base)),
-                            "terraform_resource": f"{resource_type}.{resource_name}",
-                        },
-                        labels=["InfraNode", resource_type],
-                    )
-                    nodes[node_id] = node
+    # Phase 2: Infer strategies (implemented in Task 7)
+    resources = _infer_strategies(resources)
 
-                    for ref_id in _find_references(config, node_id):
-                        edges.append(InfraEdge(source=node_id, target=ref_id, type="DEPENDS_ON"))
+    # Phase 3: Infer edges (implemented in Task 7)
+    edges = _infer_edges(resources)
 
-    log.info("terraform.parse_done", nodes=len(nodes), edges=len(edges))
-    return list(nodes.values()), edges
+    # Phase 4: Set latencies (implemented in Task 7)
+    edges = _set_default_latencies(edges)
+
+    # Phase 5: Infer recovery rules (implemented in Task 7)
+    resources = _infer_all_recovery_rules(resources, edges)
+
+    # Phase 6: Create Neo4j objects
+    nodes, edge_list = _build_infra_nodes(resources, edges)
+
+    log.info("terraform.parse_done", nodes=len(nodes), edges=len(edge_list))
+    return nodes, edge_list
 
 
 async def ingest(terraform_dir: str | Path, neo4j_client) -> dict[str, int]:

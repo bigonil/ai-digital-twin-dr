@@ -448,3 +448,39 @@ def test_monitoring_state_healthy():
     effective_rto, at_risk = apply_monitoring_state_impact(node, 10)
     assert effective_rto == 10
     assert at_risk is False
+
+
+from backend.parsers.infra import parse_directory
+import tempfile
+import os
+
+def test_parser_phase1_extract_resources(tmp_path):
+    """
+    Phase 1: Extract resources from Terraform files.
+    """
+    # Create sample Terraform file
+    tf_content = """
+resource "aws_rds_cluster" "primary" {
+  cluster_identifier = "my-database"
+  engine = "aurora-postgresql"
+}
+
+resource "aws_instance" "app" {
+  instance_type = "t3.micro"
+  ami = "ami-12345"
+}
+"""
+    tf_file = tmp_path / "main.tf"
+    tf_file.write_text(tf_content)
+
+    # Parse using the refactored parser
+    nodes, edges = parse_directory(str(tmp_path))
+
+    # Should extract at least the resource types
+    assert isinstance(nodes, list)
+    assert len(nodes) >= 2
+
+    # Verify resource types are present
+    node_types = {node.type for node in nodes}
+    assert "aws_rds_cluster" in node_types
+    assert "aws_instance" in node_types
