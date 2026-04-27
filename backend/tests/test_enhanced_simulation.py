@@ -552,3 +552,9 @@ def test_parser_phase5_infer_recovery_rules():
 
     assert rules.get("replica_edge") == "REPLICATES_TO"
     assert rules.get("fallback_rto_multiplier") == 2.0  # has replica
+
+
+def test_neo4j_client_import():
+    """Verify Neo4j client can be imported"""
+    from db import neo4j_client
+    assert neo4j_client is not None

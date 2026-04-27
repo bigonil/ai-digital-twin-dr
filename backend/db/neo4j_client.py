@@ -1,7 +1,7 @@
 """Neo4j async driver wrapper."""
 import json
 import re
-from typing import Any
+from typing import Any, List, Dict
 
 import structlog
 from neo4j import AsyncGraphDatabase
@@ -108,3 +108,47 @@ class Neo4jClient:
         ORDER BY dist
         """
         return await self.run(query, {"node_id": node_id})
+
+    async def get_outgoing_edges(self, node_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all outgoing edges from a node.
+
+        Returns: [{"target": node_id, "type": edge_type, "latency_ms": ..., "shares_resource": ..., "contention_factor": ...}]
+        """
+        query = """
+        MATCH (n:InfraNode {id: $node_id})-[r]->(target:InfraNode)
+        RETURN target.id as target, type(r) as type,
+               r.latency_ms as latency_ms, r.shares_resource as shares_resource,
+               r.contention_factor as contention_factor
+        """
+        result = await self.run(query, {"node_id": node_id})
+        return result
+
+    async def get_node_details(self, node_id: str) -> Dict[str, Any]:
+        """
+        Get all details for a single node.
+
+        Returns: {id, name, type, rto_minutes, rpo_minutes, recovery_strategy, monitoring_state, ...}
+        """
+        query = """
+        MATCH (n:InfraNode {id: $node_id})
+        RETURN n
+        """
+        result = await self.run(query, {"node_id": node_id})
+        if not result:
+            return None
+
+        node = result[0].get("n")
+        if not node:
+            return None
+
+        return {
+            "id": node.get("id"),
+            "name": node.get("name"),
+            "type": node.get("type"),
+            "rto_minutes": node.get("rto_minutes"),
+            "rpo_minutes": node.get("rpo_minutes"),
+            "recovery_strategy": node.get("recovery_strategy", "generic"),
+            "monitoring_state": node.get("monitoring_state", "unknown"),
+            "observed_latency_ms": node.get("observed_latency_ms"),
+        }
