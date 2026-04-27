@@ -1,5 +1,5 @@
 import pytest
-from backend.models.enhanced_graph import (
+from models.enhanced_graph import (
     RecoveryStrategy,
     MonitoringState,
     RecoveryRules,
@@ -86,7 +86,7 @@ def test_enhanced_simulation_response_model():
     )
     assert response.model_version == "1.0-accurate"
 
-from backend.db.neo4j_schema import (
+from db.neo4j_schema import (
     INFRA_NODE_PROPERTIES,
     EDGE_PROPERTIES,
     LATENCY_DEFAULTS,
@@ -142,7 +142,7 @@ def test_latency_inference_rules():
     assert LATENCY_INFERENCE_RULES["lambda_to_rds"] == "CALLS"
 
 
-from backend.parsers.strategy_inference import (
+from parsers.strategy_inference import (
     infer_recovery_strategy,
     infer_edge_type,
     infer_recovery_rules,
@@ -200,7 +200,7 @@ def test_get_default_latency():
     assert get_default_latency("UNKNOWN_TYPE") == 100  # Default
 
 
-from backend.algorithms.cascading_failure import bfs_with_latency
+from algorithms.cascading_failure import bfs_with_latency
 
 
 def test_bfs_latency_accumulation():
@@ -304,7 +304,7 @@ def test_bfs_depth_limit():
     assert "C" not in affected
 
 
-from backend.algorithms.rto_rpo_calculator import (
+from algorithms.rto_rpo_calculator import (
     calculate_effective_rto,
     calculate_effective_rpo,
     apply_monitoring_state_impact,
@@ -450,7 +450,7 @@ def test_monitoring_state_healthy():
     assert at_risk is False
 
 
-from backend.parsers.infra import parse_directory
+from parsers.infra import parse_directory, _infer_strategies, _infer_edges, _set_default_latencies, _infer_all_recovery_rules
 import tempfile
 import os
 
@@ -484,3 +484,71 @@ resource "aws_instance" "app" {
     node_types = {node.type for node in nodes}
     assert "aws_rds_cluster" in node_types
     assert "aws_instance" in node_types
+
+
+def test_parser_phase2_infer_strategies():
+    """Phase 2: Infer recovery strategies from resource types"""
+    resources = [
+        {"id": "aws_rds_cluster.primary", "type": "aws_rds_cluster", "name": "primary", "config": {}},
+        {"id": "aws_lambda_function.api", "type": "aws_lambda_function", "name": "api", "config": {}},
+        {"id": "aws_alb.frontend", "type": "aws_alb", "name": "frontend", "config": {}},
+    ]
+
+    result = _infer_strategies(resources)
+
+    # Find each resource in result
+    rds = next(r for r in result if r["id"] == "aws_rds_cluster.primary")
+    lambda_fn = next(r for r in result if r["id"] == "aws_lambda_function.api")
+    alb = next(r for r in result if r["id"] == "aws_alb.frontend")
+
+    assert rds.get("recovery_strategy") == "replica_fallback"
+    assert lambda_fn.get("recovery_strategy") == "stateless"
+    assert alb.get("recovery_strategy") == "multi_az"
+
+
+def test_parser_phase3_infer_edges():
+    """Phase 3: Infer edge types from resource relationships"""
+    resources = [
+        {"id": "aws_rds_cluster.primary", "type": "aws_rds_cluster", "name": "primary", "references": ["aws_rds_cluster.replica"]},
+        {"id": "aws_rds_cluster.replica", "type": "aws_rds_cluster", "name": "replica", "references": []},
+        {"id": "aws_instance.app", "type": "aws_instance", "name": "app", "references": ["aws_rds_cluster.primary"]},
+    ]
+
+    edges = _infer_edges(resources)
+
+    assert any(e["source"] == "aws_rds_cluster.primary" and e["target"] == "aws_rds_cluster.replica" and e["type"] == "REPLICATES_TO" for e in edges)
+    assert any(e["source"] == "aws_instance.app" and e["target"] == "aws_rds_cluster.primary" and e["type"] == "CALLS" for e in edges)
+
+
+def test_parser_phase4_set_latencies():
+    """Phase 4: Set default latencies per edge type"""
+    edges = [
+        {"source": "a", "target": "b", "type": "REPLICATES_TO"},
+        {"source": "b", "target": "c", "type": "CALLS"},
+    ]
+
+    result = _set_default_latencies(edges)
+
+    replicates_edge = next(e for e in result if e["type"] == "REPLICATES_TO")
+    calls_edge = next(e for e in result if e["type"] == "CALLS")
+
+    assert replicates_edge.get("latency_ms") == 1000
+    assert calls_edge.get("latency_ms") == 100
+
+
+def test_parser_phase5_infer_recovery_rules():
+    """Phase 5: Infer recovery rules"""
+    resources = [
+        {"id": "primary", "type": "aws_rds_cluster", "recovery_strategy": "replica_fallback"},
+    ]
+    edges = [
+        {"source": "primary", "target": "replica", "type": "REPLICATES_TO"},
+    ]
+
+    result = _infer_all_recovery_rules(resources, edges)
+
+    primary = next(r for r in result if r["id"] == "primary")
+    rules = primary.get("recovery_rules", {})
+
+    assert rules.get("replica_edge") == "REPLICATES_TO"
+    assert rules.get("fallback_rto_multiplier") == 2.0  # has replica

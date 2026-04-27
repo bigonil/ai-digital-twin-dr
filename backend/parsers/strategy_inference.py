@@ -1,6 +1,6 @@
 """Inference functions for recovery strategy, edge types, and recovery rules"""
 
-from backend.db.neo4j_schema import (
+from db.neo4j_schema import (
     TYPE_TO_STRATEGY,
     LATENCY_DEFAULTS,
     LATENCY_INFERENCE_RULES,

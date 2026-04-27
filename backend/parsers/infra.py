@@ -13,6 +13,12 @@ import hcl2
 import structlog
 
 from models.graph import CloudProvider, InfraEdge, InfraNode, ResourceStatus
+from .strategy_inference import (
+    infer_recovery_strategy,
+    infer_edge_type,
+    infer_recovery_rules,
+    get_default_latency,
+)
 
 log = structlog.get_logger()
 
@@ -101,11 +107,14 @@ def _extract_resources(directory: str | Path) -> list[dict[str, Any]]:
         for resource_block in parsed.get("resource", []):
             for resource_type, instances in resource_block.items():
                 for resource_name, config in instances.items():
+                    resource_id = _node_id(resource_type, resource_name)
                     resources.append({
+                        "id": resource_id,
                         "type": resource_type,
                         "name": resource_name,
                         "config": config,
                         "source_file": str(tf_file.relative_to(base)),
+                        "references": _find_references(config, resource_id),
                     })
 
     log.info("terraform.phase1_extract_done", resource_count=len(resources))
@@ -114,33 +123,78 @@ def _extract_resources(directory: str | Path) -> list[dict[str, Any]]:
 
 def _infer_strategies(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Phase 2: Infer recovery strategy.
-    (Stub for Phase 1 - will be implemented in Task 7)
+    Phase 2: Infer recovery strategy from resource type.
     """
+    for resource in resources:
+        resource_type = resource.get("type", "")
+        resource["recovery_strategy"] = infer_recovery_strategy(resource_type)
     return resources
 
 
 def _infer_edges(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Phase 3: Infer edge types and references.
-    (Stub for Phase 1 - will be implemented in Task 7)
+    Phase 3: Infer edge types from resource relationships.
     """
-    return []
+    # Build a map of resource IDs to resource objects for quick lookup
+    resource_map = {r["id"]: r for r in resources}
+
+    edges = []
+    for resource in resources:
+        source_type = resource.get("type", "")
+        references = resource.get("references", [])
+
+        for ref_id in references:
+            target_resource = resource_map.get(ref_id)
+            if not target_resource:
+                continue
+
+            target_type = target_resource.get("type", "")
+            edge_type = infer_edge_type(source_type, target_type)
+
+            edges.append({
+                "source": resource["id"],
+                "target": ref_id,
+                "type": edge_type,
+            })
+
+    return edges
 
 
 def _set_default_latencies(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Phase 4: Set default latencies for edges.
-    (Stub for Phase 1 - will be implemented in Task 7)
+    Phase 4: Set default latency per edge type.
     """
+    for edge in edges:
+        edge_type = edge.get("type", "DEPENDS_ON")
+        edge["latency_ms"] = get_default_latency(edge_type)
+        edge["latency_type"] = "static"
+        edge["shares_resource"] = False
+        edge["contention_factor"] = 1.0
     return edges
 
 
 def _infer_all_recovery_rules(resources: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Phase 5: Infer recovery rules.
-    (Stub for Phase 1 - will be implemented in Task 7)
+    Phase 5: Infer recovery rules based on strategy and dependencies.
     """
+    for resource in resources:
+        strategy = resource.get("recovery_strategy", "generic")
+        resource_id = resource["id"]
+
+        # Check if resource has replicas or backups
+        has_replica = any(
+            e["source"] == resource_id and e["type"] == "REPLICATES_TO"
+            for e in edges
+        )
+        has_backup = any(
+            e["source"] == resource_id and e["type"] == "BACKED_UP_BY"
+            for e in edges
+        )
+
+        rules = infer_recovery_rules(strategy, has_replica, has_backup)
+        if rules:
+            resource["recovery_rules"] = rules
+
     return resources
 
 
