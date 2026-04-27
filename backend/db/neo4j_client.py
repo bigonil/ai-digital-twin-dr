@@ -152,3 +152,18 @@ class Neo4jClient:
             "monitoring_state": node.get("monitoring_state", "unknown"),
             "observed_latency_ms": node.get("observed_latency_ms"),
         }
+
+    async def get_replicas(self, node_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all replica nodes connected via REPLICATES_TO edge.
+
+        Returns: [{"id": replica_id, "name": name, "rto_minutes": rto, ...}]
+        """
+        query = """
+        MATCH (n:InfraNode {id: $node_id})-[r:REPLICATES_TO]->(replica:InfraNode)
+        RETURN replica.id as id, replica.name as name, replica.type as type,
+               replica.rto_minutes as rto_minutes, replica.rpo_minutes as rpo_minutes,
+               replica.recovery_strategy as recovery_strategy,
+               replica.monitoring_state as monitoring_state
+        """
+        return await self.run(query, {"node_id": node_id})

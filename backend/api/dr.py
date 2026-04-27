@@ -97,7 +97,9 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
 
     for node_id, node_data in affected_nodes.items():
         # Get replicas if recovery_strategy is replica_fallback
-        replicas = []  # TODO: fetch from Neo4j if needed
+        replicas = []
+        if node_data.get("recovery_strategy") == "replica_fallback":
+            replicas = await request.app.state.neo4j.get_replicas(node_id)
 
         effective_rto = calculate_effective_rto(node_data, replicas, affected_ids)
         effective_rpo = node_data.get("rpo_minutes", 0)

@@ -76,12 +76,5 @@ async def migrate_add_recovery_schema(neo4j_session):
     print("Migration complete!")
 
 
-if __name__ == "__main__":
-    # For manual execution
-    import asyncio
-    from db.neo4j_client import neo4j_client
-
-    async def main():
-        await migrate_add_recovery_schema(neo4j_client.session)
-
-    asyncio.run(main())
+# Note: This migration is called from application startup, not meant to be run directly.
+# To run manually, use: python -m db.neo4j_client and call migrate_add_recovery_schema(session)

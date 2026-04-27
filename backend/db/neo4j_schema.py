@@ -137,5 +137,5 @@ async def ensure_edge_properties(neo4j_session, edge_type: str, defaults: dict) 
     if not properties_set:
         return
 
-    query = f"MATCH ()-[r:{edge_type}]-() {' '.join(properties_set)}"
-    await neo4j_session.run(query, defaults)
+    query = f"MATCH ()-[r]->() WHERE type(r) = $edge_type {' '.join(properties_set)}"
+    await neo4j_session.run(query, {"edge_type": edge_type, **defaults})
