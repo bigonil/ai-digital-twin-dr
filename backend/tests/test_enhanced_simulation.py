@@ -558,3 +558,9 @@ def test_neo4j_client_import():
     """Verify Neo4j client can be imported"""
     from db import neo4j_client
     assert neo4j_client is not None
+
+
+def test_migration_script_exists():
+    """Verify migration script exists and can be imported"""
+    from db.migrations.add_recovery_schema import migrate_add_recovery_schema
+    assert callable(migrate_add_recovery_schema)
