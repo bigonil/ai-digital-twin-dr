@@ -66,12 +66,11 @@ def _calculate_step_times(affected_nodes: list[AffectedNode], total_duration_ms:
     return updated_nodes, max_distance, timeline_steps
 
 
-@router.post("/simulate", response_model=SimulationWithTimeline)
+@router.post("/simulate", response_model=EnhancedSimulationWithTimeline)
 async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
     """
     Simulate cascading failure with enhanced timing and RTO/RPO.
-    Supports both legacy response (SimulationWithTimeline) and enhanced response (EnhancedSimulationWithTimeline)
-    based on request context and algorithm availability.
+    Uses BFS with latency accumulation and effective RTO/RPO calculation based on recovery strategies.
     """
     rows = await request.app.state.neo4j.simulate_disaster(body.node_id, body.depth)
 
@@ -82,23 +81,61 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         if not check:
             raise HTTPException(status_code=404, detail=f"Node {body.node_id!r} not found")
 
-    affected = [
-        AffectedNode(
-            id=r["id"],
-            name=r.get("name", r["id"]),
-            type=r.get("type", "unknown"),
-            distance=r["distance"],
-            estimated_rto_minutes=r.get("rto_minutes"),
-            estimated_rpo_minutes=r.get("rpo_minutes"),
-        )
-        for r in rows
-    ]
+    # Get affected nodes using BFS with latency accumulation
+    affected_nodes = await bfs_with_latency(
+        origin_node_id=body.node_id,
+        depth=body.depth,
+        get_outgoing_edges_fn=request.app.state.neo4j.get_outgoing_edges,
+        get_node_details_fn=request.app.state.neo4j.get_node_details,
+    )
 
-    # Calculate step times for timeline animation
-    affected, max_distance, timeline_steps = _calculate_step_times(affected, total_duration_ms=5000)
+    # Calculate effective RTO/RPO for each node
+    affected_node_list = []
+    worst_case_rto = 0
+    worst_case_rpo = 0
+    affected_ids = set(affected_nodes.keys())
 
-    rtos = [a.estimated_rto_minutes for a in affected if a.estimated_rto_minutes]
-    rpos = [a.estimated_rpo_minutes for a in affected if a.estimated_rpo_minutes]
+    for node_id, node_data in affected_nodes.items():
+        # Get replicas if recovery_strategy is replica_fallback
+        replicas = []  # TODO: fetch from Neo4j if needed
+
+        effective_rto = calculate_effective_rto(node_data, replicas, affected_ids)
+        effective_rpo = node_data.get("rpo_minutes", 0)
+
+        # Apply monitoring state impact if requested
+        at_risk = False
+        if body.include_monitoring:
+            effective_rto, at_risk = apply_monitoring_state_impact(node_data, effective_rto)
+
+        affected_node_list.append(EnhancedAffectedNode(
+            id=node_data["id"],
+            name=node_data["name"],
+            type=node_data["type"],
+            distance=node_data.get("distance", 0),
+            step_time_ms=node_data.get("step_time_ms", 0),
+            estimated_rto_minutes=node_data.get("rto_minutes", 0),
+            estimated_rpo_minutes=node_data.get("rpo_minutes", 0),
+            effective_rto_minutes=effective_rto,
+            effective_rpo_minutes=effective_rpo,
+            recovery_strategy=node_data.get("recovery_strategy", "generic"),
+            monitoring_state=node_data.get("monitoring_state", "unknown"),
+            at_risk=at_risk,
+        ))
+
+        worst_case_rto = max(worst_case_rto, effective_rto)
+        worst_case_rpo = max(worst_case_rpo, effective_rpo)
+
+    # Generate timeline steps
+    timeline_steps = []
+    for node in sorted(affected_node_list, key=lambda x: x.step_time_ms):
+        timeline_steps.append(TimelineStep(
+            node_id=node.id,
+            node_name=node.name,
+            distance=node.distance,
+            step_time_ms=node.step_time_ms,
+            rto_minutes=node.effective_rto_minutes,
+            rpo_minutes=node.effective_rpo_minutes,
+        ))
 
     # Mark origin node and all affected nodes as simulated_failure in Neo4j
     await request.app.state.neo4j.run(
@@ -106,22 +143,21 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         {"id": body.node_id},
     )
 
-    for node in affected:
+    for node in affected_node_list:
         await request.app.state.neo4j.run(
             "MATCH (n {id: $id}) SET n.status = 'simulated_failure'",
             {"id": node.id},
         )
 
-    return SimulationWithTimeline(
+    return EnhancedSimulationWithTimeline(
         origin_node_id=body.node_id,
-        blast_radius=affected,
-        total_affected=len(affected),
-        worst_case_rto_minutes=max(rtos) if rtos else None,
-        worst_case_rpo_minutes=max(rpos) if rpos else None,
-        recovery_steps=_basic_recovery_steps(body.node_id, affected),
-        max_distance=max_distance,
-        total_duration_ms=5000,
+        blast_radius=affected_node_list,
         timeline_steps=timeline_steps,
+        max_distance=max((n.distance for n in affected_node_list), default=0),
+        total_duration_ms=5000,
+        worst_case_rto_minutes=worst_case_rto,
+        worst_case_rpo_minutes=worst_case_rpo,
+        model_version="1.0-accurate",
     )
 
 
