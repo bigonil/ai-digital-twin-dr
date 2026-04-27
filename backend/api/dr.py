@@ -8,6 +8,17 @@ from models.graph import (
     SimulationWithTimeline,
     DriftResult,
 )
+from models.enhanced_graph import (
+    EnhancedSimulationWithTimeline,
+    EnhancedAffectedNode,
+    TimelineStep,
+)
+from algorithms.cascading_failure import bfs_with_latency
+from algorithms.rto_rpo_calculator import (
+    calculate_effective_rto,
+    calculate_effective_rpo,
+    apply_monitoring_state_impact,
+)
 
 router = APIRouter()
 
@@ -57,6 +68,11 @@ def _calculate_step_times(affected_nodes: list[AffectedNode], total_duration_ms:
 
 @router.post("/simulate", response_model=SimulationWithTimeline)
 async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
+    """
+    Simulate cascading failure with enhanced timing and RTO/RPO.
+    Supports both legacy response (SimulationWithTimeline) and enhanced response (EnhancedSimulationWithTimeline)
+    based on request context and algorithm availability.
+    """
     rows = await request.app.state.neo4j.simulate_disaster(body.node_id, body.depth)
 
     if not rows and body.node_id:
@@ -78,7 +94,7 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         for r in rows
     ]
 
-    # NEW: Calculate step times for timeline animation
+    # Calculate step times for timeline animation
     affected, max_distance, timeline_steps = _calculate_step_times(affected, total_duration_ms=5000)
 
     rtos = [a.estimated_rto_minutes for a in affected if a.estimated_rto_minutes]

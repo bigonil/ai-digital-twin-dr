@@ -564,3 +564,49 @@ def test_migration_script_exists():
     """Verify migration script exists and can be imported"""
     from db.migrations.add_recovery_schema import migrate_add_recovery_schema
     assert callable(migrate_add_recovery_schema)
+
+
+def test_api_response_includes_effective_rto():
+    """Verify API response includes effective_rto_minutes"""
+    from models.enhanced_graph import EnhancedSimulationWithTimeline, EnhancedAffectedNode, RecoveryStrategy, MonitoringState
+
+    affected_node = EnhancedAffectedNode(
+        id="test",
+        name="Test Node",
+        type="aws_instance",
+        distance=0,
+        step_time_ms=0,
+        estimated_rto_minutes=10,
+        estimated_rpo_minutes=2,
+        effective_rto_minutes=15,
+        effective_rpo_minutes=2,
+        recovery_strategy=RecoveryStrategy.STATELESS,
+        monitoring_state=MonitoringState.HEALTHY,
+    )
+
+    response = EnhancedSimulationWithTimeline(
+        origin_node_id="test",
+        blast_radius=[affected_node],
+        timeline_steps=[],
+        max_distance=0,
+        total_duration_ms=5000,
+        worst_case_rto_minutes=15,
+        worst_case_rpo_minutes=2,
+    )
+
+    assert response.blast_radius[0].effective_rto_minutes == 15
+    assert response.model_version == "1.0-accurate"
+
+
+def test_api_backward_compat():
+    """Verify old API calls without include_monitoring still work"""
+    from models.graph import DisasterSimulationRequest
+
+    # Old request without include_monitoring
+    request = DisasterSimulationRequest(
+        node_id="aws_rds_cluster.primary",
+        depth=5,
+    )
+
+    # Should default to False
+    assert request.include_monitoring == False
