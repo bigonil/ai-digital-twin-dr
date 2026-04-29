@@ -1,10 +1,13 @@
 import sys
 from pathlib import Path
 import pytest
+from fastapi.testclient import TestClient
 
 # Add the backend directory to Python path so relative imports work
 backend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_path))
+
+from main import app
 
 
 # Mark integration tests that require a running backend
@@ -31,6 +34,6 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 def client():
     """Create a test client with mocked dependencies."""
-    # For tests that call endpoints, use a real TestClient
-    # The endpoints will initialize their own dependencies from the FastAPI lifespan
-    return TestClient(app)
+    # TestClient in FastAPI 0.100+ should trigger lifespan events
+    with TestClient(app) as client:
+        yield client
