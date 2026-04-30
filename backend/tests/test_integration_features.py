@@ -12,7 +12,7 @@ class TestComplianceWorkflow:
 
     def test_full_compliance_workflow(self):
         """Test: Run audit → Get cached report → Export JSON."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             # Step 1: Run compliance audit
             run_response = client.post(f"{BASE_URL}/api/compliance/run")
             assert run_response.status_code == 200
@@ -43,7 +43,7 @@ class TestWhatIfWorkflow:
 
     def test_whatif_baseline_vs_proposed(self):
         """Test: Run baseline → Add virtual nodes → Run proposed → Compare deltas."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             # Get a valid node to use as origin
             topology_response = client.get(f"{BASE_URL}/api/graph/topology")
             assert topology_response.status_code == 200
@@ -89,7 +89,7 @@ class TestChaosWorkflow:
 
     def test_full_chaos_workflow(self):
         """Test: Create experiment → Simulate → Record actuals → Calculate resilience."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             # Get a valid node
             topology_response = client.get(f"{BASE_URL}/api/graph/topology")
             origin_node = topology_response.json()["nodes"][0]["id"]
@@ -147,7 +147,7 @@ class TestPostmortemWorkflow:
 
     def test_full_postmortem_workflow(self):
         """Test: Create postmortem → Calculate accuracy → Generate recommendations."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             # Get valid nodes
             topology_response = client.get(f"{BASE_URL}/api/graph/topology")
             nodes = topology_response.json()["nodes"]
@@ -200,7 +200,7 @@ class TestErrorHandling:
 
     def test_compliance_report_404_before_audit(self):
         """Test that getting report without running audit returns 404."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             # Create a fresh client to ensure no cached report
             response = client.get(f"{BASE_URL}/api/compliance/report")
             # This will fail the first time, but once audit is run, it will succeed
@@ -208,19 +208,19 @@ class TestErrorHandling:
 
     def test_chaos_experiment_404_not_found(self):
         """Test getting non-existent chaos experiment returns 404."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             response = client.get(f"{BASE_URL}/api/chaos/experiments/nonexistent-id")
             assert response.status_code == 404
 
     def test_postmortem_report_404_not_found(self):
         """Test getting non-existent postmortem report returns 404."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             response = client.get(f"{BASE_URL}/api/postmortem/reports/nonexistent-id")
             assert response.status_code == 404
 
     def test_whatif_invalid_node(self):
         """Test what-if with invalid origin node."""
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             payload = {
                 "origin_node_id": "invalid-node-that-doesnt-exist",
                 "depth": 3,
@@ -239,7 +239,7 @@ class TestPerformance:
         """Test that compliance audit on 14 nodes completes in reasonable time."""
         import time
 
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             start = time.time()
             response = client.post(f"{BASE_URL}/api/compliance/run", timeout=30.0)
             duration = time.time() - start
@@ -251,7 +251,7 @@ class TestPerformance:
         """Test that what-if simulation with virtual nodes completes quickly."""
         import time
 
-        with httpx.Client() as client:
+        with httpx.Client(timeout=30) as client:
             topology_response = client.get(f"{BASE_URL}/api/graph/topology")
             origin_node = topology_response.json()["nodes"][0]["id"]
 
