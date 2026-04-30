@@ -89,6 +89,10 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         get_node_details_fn=request.app.state.neo4j.get_node_details,
     )
 
+    # Normalize step_time_ms by distance (not latency) for timeline animation
+    max_distance = max((n.get("distance", 0) for n in affected_nodes.values()), default=1)
+    total_duration_ms = 5000
+
     # Calculate effective RTO/RPO for each node
     affected_node_list = []
     worst_case_rto = 0
@@ -109,12 +113,16 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         if body.include_monitoring:
             effective_rto, at_risk = apply_monitoring_state_impact(node_data, effective_rto)
 
+        # Normalize step_time_ms: distance N → proportional time in 0-5000ms range
+        distance = node_data.get("distance", 0)
+        normalized_step_time_ms = int(distance * (total_duration_ms / max_distance)) if max_distance > 0 else 0
+
         affected_node_list.append(EnhancedAffectedNode(
             id=node_data["id"],
             name=node_data["name"],
             type=node_data["type"],
-            distance=node_data.get("distance", 0),
-            step_time_ms=node_data.get("step_time_ms", 0),
+            distance=distance,
+            step_time_ms=normalized_step_time_ms,
             estimated_rto_minutes=node_data.get("rto_minutes", 0),
             estimated_rpo_minutes=node_data.get("rpo_minutes", 0),
             effective_rto_minutes=effective_rto,
