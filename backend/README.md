@@ -162,6 +162,81 @@ Compare Neo4j graph state vs last-known Terraform state.
 
 Reset a node to healthy status after simulation.
 
+## Documentation Ingestion
+
+Ingest markdown documentation into **Qdrant** for semantic search and link to **Neo4j** infrastructure nodes.
+
+### Setup
+
+Run the ingestion script:
+
+```bash
+docker exec dt-backend python scripts/ingest_docs.py
+```
+
+The script:
+- Reads markdown files from `backend/docs/`
+- Chunks text into 512-character segments (overlap: 64 chars)
+- Creates embeddings via Ollama (`nomic-embed-text`, 768-dim vectors)
+- Upserts chunks into Qdrant collection `dr_docs`
+- Creates `Document` nodes in Neo4j
+- Maps `DOCUMENTED_BY` relationships to infrastructure nodes using keyword matching
+
+### Ingestion Results
+
+| Component | Count |
+|-----------|-------|
+| Qdrant embedding chunks | 218 |
+| Neo4j Document nodes | 9 |
+| Document→Infrastructure relationships | 33 |
+
+### Keyword Mappings
+
+Documents are linked to infrastructure nodes based on keywords:
+- `cloudfront`, `cdn` → load balancers
+- `rds`, `database`, `failover` → database clusters
+- `api` → API servers
+- `cache` → ElastiCache
+- `queue` → SQS
+- `storage` → S3
+- `backup` → backup service
+- `architecture`, `dependencies`, `topology` → all nodes
+- `procedures`, `runbook` → database & backup nodes
+- `scenarios`, `faq` → database & API nodes
+
+### POST /api/dr/docs/search
+
+Search documentation by semantic similarity.
+
+**Request:**
+```json
+{
+  "query": "How do I recover from a database failure?",
+  "limit": 5
+}
+```
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "id": "80fd1fd3-63b3-540a-4bc9-3e724fb2bf58",
+      "score": 0.87,
+      "text": "Database failover involves switching to a healthy replica...",
+      "source_file": "04-rds-failover.md",
+      "title": "RDS Failover"
+    }
+  ]
+}
+```
+
+### Adding More Documents
+
+1. Place markdown files in `backend/docs/`
+2. Run ingestion script
+3. Documents are automatically chunked, embedded, and linked
+
 ## Database
 
 ### Schema

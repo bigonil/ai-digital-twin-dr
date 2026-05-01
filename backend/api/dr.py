@@ -1,5 +1,6 @@
-"""Disaster Recovery API — simulate, plan, drift."""
+"""Disaster Recovery API — simulate, plan, drift, search docs."""
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from models.graph import (
     AffectedNode,
@@ -19,8 +20,63 @@ from algorithms.rto_rpo_calculator import (
     calculate_effective_rpo,
     apply_monitoring_state_impact,
 )
+from parsers.docs import _embed
 
 router = APIRouter()
+
+
+class DocSearchRequest(BaseModel):
+    query: str
+    limit: int = 5
+
+
+class DocSearchResult(BaseModel):
+    id: str
+    score: float
+    text: str
+    source_file: str
+    title: str
+
+
+class DocSearchResponse(BaseModel):
+    results: list[DocSearchResult]
+
+
+@router.post("/docs/search", response_model=DocSearchResponse)
+async def search_docs(body: DocSearchRequest, request: Request):
+    """
+    Search documentation by semantic similarity.
+    Embeds query text and searches Qdrant for similar chunks.
+    """
+    if not body.query or len(body.query.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Query must be at least 3 characters")
+
+    try:
+        # Embed query text
+        query_vector = await _embed(body.query)
+
+        # Search Qdrant
+        qdrant_results = await request.app.state.qdrant.search(
+            vector=query_vector,
+            limit=body.limit
+        )
+
+        # Transform results
+        results = []
+        for hit in qdrant_results:
+            payload = hit.get("payload", {})
+            results.append(DocSearchResult(
+                id=str(hit["id"]),
+                score=hit["score"],
+                text=payload.get("text", ""),
+                source_file=payload.get("source_file", ""),
+                title=payload.get("title", "")
+            ))
+
+        return DocSearchResponse(results=results)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
 def _calculate_step_times(affected_nodes: list[AffectedNode], total_duration_ms: int = 5000) -> tuple[list[AffectedNode], int, list[dict]]:
