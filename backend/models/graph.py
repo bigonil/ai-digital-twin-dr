@@ -76,6 +76,7 @@ class InfraGraph(BaseModel):
 class DisasterSimulationRequest(BaseModel):
     node_id: str
     depth: int = Field(default=5, ge=1, le=10)
+    include_monitoring: bool = False
 
 
 class AffectedNode(BaseModel):
