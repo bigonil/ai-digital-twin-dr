@@ -145,16 +145,83 @@ TYPE_TO_STRATEGY = {
 
 # Inference rules for edge type based on source and target resource types
 LATENCY_INFERENCE_RULES = {
+    # ============================================
+    # AWS Rules
+    # ============================================
     "rds_to_rds": "REPLICATES_TO",
+    "aurora_to_aurora": "REPLICATES_TO",
     "lambda_to_rds": "CALLS",
     "lambda_to_lambda": "CALLS",
     "instance_to_rds": "CALLS",
     "instance_to_lambda": "CALLS",
     "instance_to_instance": "CALLS",
     "ecs_to_rds": "CALLS",
+    "ecs_to_ecs": "CALLS",
     "alb_to_instance": "ROUTES_TO",
     "alb_to_ecs": "ROUTES_TO",
     "elb_to_instance": "ROUTES_TO",
+    "lb_to_instance": "ROUTES_TO",
+    "lb_to_ecs": "ROUTES_TO",
+    "elasticache_to_instance": "USES",
+    "elasticache_to_lambda": "USES",
+    "elasticache_to_ecs": "USES",
+    "sqs_to_instance": "USES",
+    "sns_to_instance": "USES",
+
+    # ============================================
+    # Azure Rules
+    # ============================================
+    "mssql_to_mssql": "REPLICATES_TO",
+    "mysql_to_mysql": "REPLICATES_TO",
+    "postgresql_to_postgresql": "REPLICATES_TO",
+    "cosmosdb_to_cosmosdb": "REPLICATES_TO",
+    "redis_to_redis": "REPLICATES_TO",
+    "vm_to_mssql": "CALLS",
+    "vm_to_mysql": "CALLS",
+    "vm_to_postgresql": "CALLS",
+    "vm_to_cosmosdb": "CALLS",
+    "vm_to_vm": "CALLS",
+    "aci_to_mssql": "CALLS",
+    "appservice_to_mssql": "CALLS",
+    "appservice_to_cosmosdb": "CALLS",
+    "kubernetes_to_mssql": "CALLS",
+    "kubernetes_to_cosmosdb": "CALLS",
+    "appgateway_to_vm": "ROUTES_TO",
+    "appgateway_to_aci": "ROUTES_TO",
+    "appgateway_to_appservice": "ROUTES_TO",
+    "loadbalancer_to_vm": "ROUTES_TO",
+    "redis_to_vm": "USES",
+    "redis_to_appservice": "USES",
+    "servicebus_to_vm": "USES",
+    "servicebus_to_appservice": "USES",
+
+    # ============================================
+    # GCP Rules
+    # ============================================
+    "sql_to_sql": "REPLICATES_TO",
+    "bigtable_to_bigtable": "REPLICATES_TO",
+    "firestore_to_firestore": "REPLICATES_TO",
+    "spanner_to_spanner": "REPLICATES_TO",
+    "redis_to_redis": "REPLICATES_TO",
+    "memcache_to_memcache": "REPLICATES_TO",
+    "instance_to_sql": "CALLS",
+    "instance_to_firestore": "CALLS",
+    "instance_to_bigtable": "CALLS",
+    "cloudrun_to_sql": "CALLS",
+    "cloudrun_to_firestore": "CALLS",
+    "cloudrun_to_bigtable": "CALLS",
+    "kubernetes_to_sql": "CALLS",
+    "kubernetes_to_firestore": "CALLS",
+    "kubernetes_to_spanner": "CALLS",
+    "backend_service_to_instance": "ROUTES_TO",
+    "backend_service_to_instance_group": "ROUTES_TO",
+    "backend_service_to_cloudrun": "ROUTES_TO",
+    "redis_to_instance": "USES",
+    "redis_to_cloudrun": "USES",
+    "memcache_to_instance": "USES",
+    "memcache_to_cloudrun": "USES",
+    "pubsub_to_instance": "USES",
+    "pubsub_to_cloudrun": "USES",
 }
 
 
