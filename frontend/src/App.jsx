@@ -91,9 +91,9 @@ export default function App() {
         <header className="flex flex-col bg-dt-surface border-b border-dt-border shrink-0">
           <div className="flex items-center justify-between px-6 py-3">
             <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-dt-accent animate-pulse" />
+              <span className="text-2xl" title="Cassandra - Predictive Resilience Engine">🔮</span>
               <span className="font-mono font-bold text-dt-accent tracking-widest text-sm uppercase">
-                Digital Twin DR Platform
+                Cassandra — Predictive Resilience Engine
               </span>
             </div>
             <div className="text-xs text-gray-500 font-mono">

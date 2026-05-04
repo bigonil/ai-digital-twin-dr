@@ -1,4 +1,4 @@
-# AI Digital Twin DR Backend
+# CASSANDRA — Predictive Resilience Engine | Backend
 
 Accurate cascading failure simulation for disaster recovery planning. Models realistic failure propagation with edge-type-specific latencies, dynamic RTO/RPO calculation based on recovery strategies, and monitoring state integration.
 
@@ -412,7 +412,7 @@ python main.py
 
 ## License
 
-Proprietary — AI Digital Twin Project
+Proprietary — CASSANDRA Project
 
 ## Support
 

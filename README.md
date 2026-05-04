@@ -1,6 +1,6 @@
-# 🧬 AI Digital Twin — Disaster Recovery Platform
+# 🔮 CASSANDRA — Predictive Resilience Engine
 
-> **A Living Digital Twin of your infrastructure for real-time Disaster Recovery simulation.**  
+> **A living predictive engine for your cloud infrastructure.**  
 > Map Terraform resources, source code, and documentation into a unified graph — then simulate failure scenarios and generate recovery playbooks in seconds.
 
 ---
@@ -9,7 +9,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         AI Digital Twin Platform                            │
+│                    CASSANDRA — Predictive Resilience Engine                  │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │                     React Frontend  (:3001)                          │   │
