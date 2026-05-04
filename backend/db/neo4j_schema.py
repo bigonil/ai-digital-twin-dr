@@ -51,20 +51,96 @@ LATENCY_DEFAULTS = {
 
 # Mapping from resource type to recovery strategy
 TYPE_TO_STRATEGY = {
+    # AWS: Databases
     "aws_rds_cluster": "replica_fallback",
     "aws_rds_instance": "replica_fallback",
     "aws_aurora_cluster": "replica_fallback",
+    "aws_db_instance": "replica_fallback",
+    "aws_dynamodb_table": "multi_az",
+    # AWS: Networking & Load Balancing
     "aws_elb": "multi_az",
     "aws_alb": "multi_az",
     "aws_lb": "multi_az",
+    "aws_api_gateway": "stateless",
+    # AWS: Compute
     "aws_lambda_function": "stateless",
     "aws_ecs_service": "stateless",
     "aws_ecs_task": "stateless",
-    "aws_s3_bucket": "stateless",
+    "aws_ecs_cluster": "stateless",
     "aws_ec2_instance": "generic",
-    "aws_dynamodb_table": "multi_az",
+    "aws_instance": "generic",
+    "aws_autoscaling_group": "stateless",
+    # AWS: Caching & Messaging
+    "aws_elasticache_cluster": "replica_fallback",
+    "aws_elasticache_replication_group": "replica_fallback",
     "aws_sqs_queue": "generic",
     "aws_sns_topic": "generic",
+    # AWS: Storage
+    "aws_s3_bucket": "stateless",
+    "aws_ebs_volume": "backup_fallback",
+    "aws_backup_vault": "stateless",
+    # AWS: CDN
+    "aws_cloudfront_distribution": "stateless",
+
+    # Azure: Databases
+    "azurerm_mssql_server": "replica_fallback",
+    "azurerm_mssql_database": "replica_fallback",
+    "azurerm_mysql_flexible_server": "backup_fallback",
+    "azurerm_mysql_server": "backup_fallback",
+    "azurerm_postgresql_flexible_server": "backup_fallback",
+    "azurerm_postgresql_server": "backup_fallback",
+    "azurerm_cosmosdb_account": "multi_az",
+    "azurerm_mariadb_server": "backup_fallback",
+    # Azure: Networking & Load Balancing
+    "azurerm_application_gateway": "multi_az",
+    "azurerm_load_balancer": "multi_az",
+    "azurerm_traffic_manager_profile": "stateless",
+    "azurerm_virtual_network": "stateless",
+    "azurerm_subnet": "stateless",
+    "azurerm_network_security_group": "stateless",
+    # Azure: Compute
+    "azurerm_virtual_machine": "generic",
+    "azurerm_virtual_machine_scale_set": "stateless",
+    "azurerm_container_instance": "stateless",
+    "azurerm_app_service": "stateless",
+    "azurerm_app_service_plan": "stateless",
+    "azurerm_kubernetes_cluster": "stateless",
+    # Azure: Caching
+    "azurerm_redis_cache": "replica_fallback",
+    # Azure: Storage
+    "azurerm_storage_account": "stateless",
+    "azurerm_storage_blob": "stateless",
+    # Azure: CDN
+    "azurerm_cdn_endpoint": "stateless",
+
+    # GCP: Databases
+    "google_sql_database_instance": "replica_fallback",
+    "google_sql_database": "replica_fallback",
+    "google_bigtable_instance": "multi_az",
+    "google_firestore_database": "multi_az",
+    "google_spanner_instance": "multi_az",
+    # GCP: Networking & Load Balancing
+    "google_compute_backend_service": "multi_az",
+    "google_compute_health_check": "stateless",
+    "google_compute_load_balancer": "multi_az",
+    "google_compute_network": "stateless",
+    "google_compute_subnetwork": "stateless",
+    "google_compute_firewall": "stateless",
+    # GCP: Compute
+    "google_compute_instance": "generic",
+    "google_compute_instance_group": "stateless",
+    "google_compute_instance_group_manager": "stateless",
+    "google_compute_instance_template": "stateless",
+    "google_container_cluster": "stateless",
+    "google_container_node_pool": "stateless",
+    "google_cloud_run_service": "stateless",
+    # GCP: Caching
+    "google_redis_instance": "replica_fallback",
+    "google_memcache_instance": "replica_fallback",
+    # GCP: Storage
+    "google_storage_bucket": "stateless",
+    # GCP: CDN
+    "google_compute_backend_service": "multi_az",
 }
 
 # Inference rules for edge type based on source and target resource types

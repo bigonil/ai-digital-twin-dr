@@ -36,28 +36,105 @@ REDUNDANCY_TYPES = {
 
 # RTO/RPO defaults by resource type (in minutes)
 RTO_RPO_MAP = {
+    # ============================================
+    # AWS SERVICES
+    # ============================================
     # Databases: low RTO/RPO with replication
     "aws_rds_cluster": (5, 1),
     "aws_rds_cluster_instance": (5, 1),
+    "aws_rds_instance": (5, 1),
     "aws_db_instance": (10, 2),
-    "azurerm_mssql_server": (10, 2),
+    "aws_aurora_cluster": (5, 1),
     # Caching: very low RTO/RPO
     "aws_elasticache_cluster": (3, 1),
     "aws_elasticache_replication_group": (3, 1),
     # Load balancing & auto-scaling: fast recovery
+    "aws_elb": (2, 0),
+    "aws_alb": (2, 0),
     "aws_lb": (2, 0),
+    "aws_api_gateway": (2, 0),
     "aws_autoscaling_group": (5, 1),
     # Compute: moderate RTO/RPO
     "aws_instance": (30, 10),
+    "aws_ec2_instance": (30, 10),
     "aws_lambda_function": (5, 1),
     "aws_ecs_service": (10, 2),
-    # Storage: longer RTO, depends on backup
+    "aws_ecs_task": (10, 2),
+    "aws_ecs_cluster": (15, 5),
+    # Storage & Backup
     "aws_s3_bucket": (60, 30),
     "aws_ebs_volume": (15, 5),
+    "aws_backup_vault": (60, 30),
+    # CDN
+    "aws_cloudfront_distribution": (5, 1),
+    # Messaging
+    "aws_sqs_queue": (10, 2),
+    "aws_sns_topic": (10, 2),
     # Networking: very fast
     "aws_vpc": (1, 0),
     "aws_subnet": (1, 0),
     "aws_security_group": (1, 0),
+
+    # ============================================
+    # AZURE SERVICES
+    # ============================================
+    # Databases
+    "azurerm_mssql_server": (10, 2),
+    "azurerm_mssql_database": (10, 2),
+    "azurerm_mysql_flexible_server": (15, 5),
+    "azurerm_mysql_server": (15, 5),
+    "azurerm_postgresql_flexible_server": (15, 5),
+    "azurerm_postgresql_server": (15, 5),
+    "azurerm_cosmosdb_account": (5, 1),
+    "azurerm_mariadb_server": (15, 5),
+    # Networking & Load Balancing
+    "azurerm_application_gateway": (2, 0),
+    "azurerm_load_balancer": (2, 0),
+    "azurerm_traffic_manager_profile": (1, 0),
+    "azurerm_virtual_network": (1, 0),
+    "azurerm_subnet": (1, 0),
+    "azurerm_network_security_group": (1, 0),
+    # Compute
+    "azurerm_virtual_machine": (30, 10),
+    "azurerm_virtual_machine_scale_set": (5, 1),
+    "azurerm_container_instance": (10, 2),
+    "azurerm_app_service": (10, 2),
+    "azurerm_app_service_plan": (10, 2),
+    "azurerm_kubernetes_cluster": (15, 5),
+    # Caching & Storage
+    "azurerm_redis_cache": (3, 1),
+    "azurerm_storage_account": (60, 30),
+    "azurerm_storage_blob": (60, 30),
+    "azurerm_cdn_endpoint": (5, 1),
+
+    # ============================================
+    # GCP SERVICES
+    # ============================================
+    # Databases
+    "google_sql_database_instance": (10, 2),
+    "google_sql_database": (10, 2),
+    "google_bigtable_instance": (5, 1),
+    "google_firestore_database": (5, 1),
+    "google_spanner_instance": (5, 1),
+    # Networking & Load Balancing
+    "google_compute_backend_service": (2, 0),
+    "google_compute_health_check": (1, 0),
+    "google_compute_load_balancer": (2, 0),
+    "google_compute_network": (1, 0),
+    "google_compute_subnetwork": (1, 0),
+    "google_compute_firewall": (1, 0),
+    # Compute
+    "google_compute_instance": (30, 10),
+    "google_compute_instance_group": (5, 1),
+    "google_compute_instance_group_manager": (5, 1),
+    "google_compute_instance_template": (1, 0),
+    "google_container_cluster": (15, 5),
+    "google_container_node_pool": (10, 2),
+    "google_cloud_run_service": (5, 1),
+    # Caching & Storage
+    "google_redis_instance": (3, 1),
+    "google_memcache_instance": (3, 1),
+    "google_storage_bucket": (60, 30),
     # Default for unknown types
 }
 
