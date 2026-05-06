@@ -20,11 +20,15 @@ Write-Host "🌱 Seeding RTO/RPO values into Neo4j..." -ForegroundColor Cyan
 # Python script to seed RTO/RPO values
 $pythonScript = @"
 import asyncio
-from db.neo4j_client import neo4j_client
+from db.neo4j_client import Neo4jClient
 from parsers.infra import RTO_RPO_MAP
+from settings import Settings
 
 async def seed_rto_rpo():
     """Seed RTO/RPO values into Neo4j from RTO_RPO_MAP"""
+
+    settings = Settings()
+    neo4j_client = Neo4jClient(settings)
 
     try:
         await neo4j_client.connect()
