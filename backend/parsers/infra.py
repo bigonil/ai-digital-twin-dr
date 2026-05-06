@@ -149,11 +149,12 @@ def _infer_edges(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 continue
 
             target_type = target_resource.get("type", "")
-            edge_type = infer_edge_type(source_type, target_type)
+            # If resource references ref_id, then ref_id impacts resource (ref_id → resource)
+            edge_type = infer_edge_type(target_type, source_type)
 
             edges.append({
-                "source": resource["id"],
-                "target": ref_id,
+                "source": ref_id,
+                "target": resource["id"],
                 "type": edge_type,
             })
 
@@ -234,8 +235,9 @@ def _build_infra_nodes(resources: list[dict[str, Any]], edges: list[dict[str, An
         nodes.append(node)
 
         # Extract references from config for edges
+        # If node_id references ref_id, then ref_id impacts node_id (ref_id → node_id)
         for ref_id in _find_references(config, node_id):
-            edge_list.append(InfraEdge(source=node_id, target=ref_id, type="DEPENDS_ON"))
+            edge_list.append(InfraEdge(source=ref_id, target=node_id, type="DEPENDS_ON"))
 
     # Add edges from Phase 3 if any
     for edge in edges:
