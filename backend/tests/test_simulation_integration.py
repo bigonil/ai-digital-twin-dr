@@ -1,9 +1,4 @@
 import pytest
-from fastapi.testclient import TestClient
-from main import app
-
-
-client = TestClient(app)
 
 
 @pytest.fixture
@@ -15,7 +10,7 @@ def setup_graph():
     # Cleanup (optional)
 
 
-def test_simulate_disaster_returns_timeline_data():
+def test_simulate_disaster_returns_timeline_data(client):
     """Test that simulate_disaster endpoint returns step_time_ms and timeline_steps."""
     response = client.post(
         "/api/dr/simulate",
@@ -40,7 +35,7 @@ def test_simulate_disaster_returns_timeline_data():
             assert node["step_time_ms"] <= data["total_duration_ms"]
 
 
-def test_step_times_are_proportional_to_distance():
+def test_step_times_are_proportional_to_distance(client):
     """Test that step_time_ms values increase with distance."""
     response = client.post(
         "/api/dr/simulate",
@@ -64,7 +59,7 @@ def test_step_times_are_proportional_to_distance():
                 assert abs(expected_ratio - actual_ratio) < 0.01
 
 
-def test_simulate_disaster_404_on_missing_node():
+def test_simulate_disaster_404_on_missing_node(client):
     """Test that simulate_disaster returns 404 for missing node."""
     response = client.post(
         "/api/dr/simulate",
@@ -75,7 +70,7 @@ def test_simulate_disaster_404_on_missing_node():
     assert response.status_code == 404
 
 
-def test_reset_node_endpoint():
+def test_reset_node_endpoint(client):
     """Test that reset_node endpoint works."""
     response = client.post(
         "/api/dr/reset/test-node-001"
