@@ -3,7 +3,7 @@
 from typing import Dict, Callable, Any, List
 
 
-def bfs_with_latency(
+async def bfs_with_latency(
     origin_node_id: str,
     depth: int,
     get_outgoing_edges_fn: Callable[[str], List[Dict[str, Any]]],
@@ -15,8 +15,8 @@ def bfs_with_latency(
     Args:
         origin_node_id: Starting node ID
         depth: Maximum hops to traverse
-        get_outgoing_edges_fn: Function(node_id) → List[{target, latency_ms, shares_resource, contention_factor}]
-        get_node_details_fn: Function(node_id) → {id, name, type, ...}
+        get_outgoing_edges_fn: Async function(node_id) → List[{target, latency_ms, shares_resource, contention_factor}]
+        get_node_details_fn: Async function(node_id) → {id, name, type, ...}
 
     Returns:
         Dict of affected nodes with step_time_ms: {node_id: {id, name, step_time_ms, ...}}
@@ -37,7 +37,7 @@ def bfs_with_latency(
         # Calculate accumulated latency with contention if needed
         if parent_id and base_latency > 0:
             # Check if siblings with shared resources are already affected
-            parent_edges = get_outgoing_edges_fn(parent_id)
+            parent_edges = await get_outgoing_edges_fn(parent_id)
             current_edge = next(
                 (e for e in parent_edges if e["target"] == current_node_id),
                 None
@@ -58,7 +58,7 @@ def bfs_with_latency(
         acc_latency = parent_latency + base_latency
 
         # Record affected node
-        node_details = get_node_details_fn(current_node_id)
+        node_details = await get_node_details_fn(current_node_id)
         if node_details:
             affected_nodes[current_node_id] = {
                 **node_details,
@@ -67,7 +67,7 @@ def bfs_with_latency(
             }
 
         # Process outgoing edges
-        outgoing_edges = get_outgoing_edges_fn(current_node_id)
+        outgoing_edges = await get_outgoing_edges_fn(current_node_id)
 
         for edge in outgoing_edges:
             target_node_id = edge["target"]
