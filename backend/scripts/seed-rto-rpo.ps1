@@ -76,7 +76,7 @@ try {
 
     # Copy to container and execute
     docker cp $tempFile "${ContainerName}:/tmp/seed_script.py"
-    docker exec -w /app $ContainerName python /tmp/seed_script.py
+    docker exec -w /app -e PYTHONPATH=/app $ContainerName python /tmp/seed_script.py
 
     # Cleanup temp file
     Remove-Item -Path $tempFile -Force
