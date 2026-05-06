@@ -12,16 +12,13 @@
 #>
 
 param(
-    [string]$ContainerName = "dt-backend",
-    [string]$Neo4jUri = "neo4j://localhost:7687",
-    [string]$Neo4jUser = "neo4j",
-    [string]$Neo4jPassword = "password"
+    [string]$ContainerName = "dt-backend"
 )
 
 Write-Host "🌱 Seeding RTO/RPO values into Neo4j..." -ForegroundColor Cyan
 
 # Python script to seed RTO/RPO values
-$pythonScript = @'
+$pythonScript = @"
 import asyncio
 from db.neo4j_client import neo4j_client
 from parsers.infra import RTO_RPO_MAP
@@ -38,32 +35,28 @@ async def seed_rto_rpo():
             for resource_type, (rto, rpo) in RTO_RPO_MAP.items():
                 # Update all nodes of this resource type
                 result = await session.run(
-                    """
-                    MATCH (n:InfraNode {type: $type})
-                    SET n.rto_minutes = $rto, n.rpo_minutes = $rpo
-                    RETURN count(n) as updated
-                    """,
-                    {"type": resource_type, "rto": rto, "rpo": rpo}
+                    'MATCH (n:InfraNode {type: `$type}) SET n.rto_minutes = `$rto, n.rpo_minutes = `$rpo RETURN count(n) as updated',
+                    {'type': resource_type, 'rto': rto, 'rpo': rpo}
                 )
 
                 # Count updated nodes
                 record = await result.single()
                 if record:
-                    count = record.get("updated", 0)
+                    count = record.get('updated', 0)
                     updated_count += count
                     if count > 0:
-                        print(f"  ✓ {resource_type}: {count} nodes updated (RTO={rto}min, RPO={rpo}min)")
+                        print(f'  ✓ {resource_type}: {count} nodes updated (RTO={rto}min, RPO={rpo}min)')
 
-        print(f"\n✅ Seeding complete! Updated {updated_count} total nodes")
+        print(f'\n✅ Seeding complete! Updated {updated_count} total nodes')
 
     except Exception as e:
-        print(f"❌ Error during seeding: {str(e)}")
+        print(f'❌ Error during seeding: {str(e)}')
         raise
     finally:
         await neo4j_client.close()
 
 asyncio.run(seed_rto_rpo())
-'@
+"@
 
 # Execute Python script in the backend container
 try {
@@ -77,8 +70,16 @@ try {
         exit 1
     }
 
-    # Execute the Python script
-    docker exec -w /app $ContainerName python -c $pythonScript
+    # Write script to temp file and copy to container
+    $tempFile = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.py'
+    Set-Content -Path $tempFile -Value $pythonScript -Encoding UTF8
+
+    # Copy to container and execute
+    docker cp $tempFile "${ContainerName}:/tmp/seed_script.py"
+    docker exec -w /app $ContainerName python /tmp/seed_script.py
+
+    # Cleanup temp file
+    Remove-Item -Path $tempFile -Force
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "`n✨ RTO/RPO seeding successful!" -ForegroundColor Green
