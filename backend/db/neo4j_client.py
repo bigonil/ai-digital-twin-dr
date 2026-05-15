@@ -1,12 +1,16 @@
 """Neo4j async driver wrapper."""
 import json
 import re
+import time
 from typing import Any, List, Dict
 
 import structlog
 from neo4j import AsyncGraphDatabase
 
+from observability import neo4j_query_duration, get_tracer
+
 log = structlog.get_logger()
+_tracer = get_tracer("neo4j_client")
 
 # Whitelist of allowed relationship types to prevent Cypher injection
 _ALLOWED_REL_TYPES: frozenset[str] = frozenset(
@@ -58,9 +62,19 @@ class Neo4jClient:
             await self._driver.close()
 
     async def run(self, query: str, params: dict[str, Any] | None = None) -> list[dict]:
-        async with self._driver.session() as session:
-            result = await session.run(query, params or {})
-            return [record.data() async for record in result]
+        # Infer query type from first keyword for metric labeling
+        query_type = query.strip().split()[0].upper() if query.strip() else "UNKNOWN"
+        t0 = time.perf_counter()
+        with _tracer.start_as_current_span("neo4j.query") as span:
+            span.set_attribute("db.system", "neo4j")
+            span.set_attribute("db.statement", query.strip()[:200])
+            span.set_attribute("db.operation", query_type)
+            async with self._driver.session() as session:
+                result = await session.run(query, params or {})
+                rows = [record.data() async for record in result]
+            span.set_attribute("db.row_count", len(rows))
+        neo4j_query_duration.labels(query_type=query_type).observe(time.perf_counter() - t0)
+        return rows
 
     async def merge_node(self, node: dict[str, Any], label: str = "InfraNode") -> None:
         query = f"""

@@ -34,3 +34,9 @@ slowapi==0.1.9
 
 # Auth tokens
 python-jose[cryptography]==3.3.0
+
+# OpenTelemetry tracing
+opentelemetry-sdk>=1.24.0
+opentelemetry-exporter-otlp-proto-grpc>=1.24.0
+opentelemetry-instrumentation-fastapi>=0.45b0
+opentelemetry-instrumentation-httpx>=0.45b0

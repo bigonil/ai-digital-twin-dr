@@ -20,10 +20,15 @@ from db.neo4j_client import Neo4jClient
 from db.qdrant_client import QdrantClient
 from db.victoriametrics_client import VictoriaMetricsClient
 from models.errors import ErrorResponse
+from observability import setup_tracing, instrument_fastapi, instrument_httpx
 from settings import Settings
 
 settings = Settings()
 log = structlog.get_logger()
+
+# Initialize OTel tracing at module load (before app creation for FastAPIInstrumentor)
+setup_tracing("athena-backend", settings.otel_endpoint)
+instrument_httpx()
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -110,6 +115,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 Instrumentator().instrument(app).expose(app)
+instrument_fastapi(app)
 
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])

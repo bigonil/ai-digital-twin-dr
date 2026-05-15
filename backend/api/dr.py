@@ -1,10 +1,12 @@
 """Disaster Recovery API — simulate, plan, drift, search docs."""
+import time
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, status, Depends
 from pydantic import BaseModel
 import structlog
 
 from api.dependencies import verify_api_key, limiter
+from observability import simulation_latency, affected_nodes_histogram
 from models.features import RecoveryPlaybook, PlaybookRequest
 from models.graph import (
     AffectedNode,
@@ -151,6 +153,8 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
     Uses BFS with latency accumulation and effective RTO/RPO calculation based on recovery strategies.
     """
     try:
+        _sim_start = time.perf_counter()
+
         # Validate node_id exists
         check = await request.app.state.neo4j.run(
             "MATCH (n {id: $id}) RETURN n.id LIMIT 1", {"id": body.node_id}
@@ -250,6 +254,12 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
             )
 
         total_cost = round(sum(n.recovery_cost_usd or 0 for n in affected_node_list), 2)
+
+        # Record Prometheus metrics
+        origin_type = affected_nodes.get(body.node_id, {}).get("type", "unknown")
+        simulation_latency.labels(origin_node_type=origin_type).observe(time.perf_counter() - _sim_start)
+        affected_nodes_histogram.observe(len(affected_node_list))
+
         log.info("simulate_success", node_id=body.node_id, affected_count=len(affected_node_list), total_cost_usd=total_cost)
         return EnhancedSimulationWithTimeline(
             origin_node_id=body.node_id,

@@ -12,6 +12,7 @@ volumes:
   neo4j_plugins:
   victoriametrics_data:
   qdrant_data:
+  grafana_data:
 
 services:
 
@@ -195,6 +196,7 @@ services:
       LOG_LEVEL: "${LOG_LEVEL}"
       DR_RTO_THRESHOLD_MINUTES: "${DR_RTO_THRESHOLD_MINUTES}"
       DR_RPO_THRESHOLD_MINUTES: "${DR_RPO_THRESHOLD_MINUTES}"
+      OTEL_ENDPOINT: "http://jaeger:4317"
     extra_hosts:
       # Required on native Linux Docker to reach host machine's Ollama
       - "host.docker.internal:host-gateway"
@@ -223,6 +225,55 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # ─────────────────────────────────────────────
+  # DISTRIBUTED TRACING — Jaeger all-in-one
+  # ─────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: dt-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC receiver
+      - "4318:4318"     # OTLP HTTP receiver
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.40
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ─────────────────────────────────────────────
+  # DASHBOARDS — Grafana
+  # ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: dt-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.41
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    depends_on:
+      - victoriametrics
 
   # ─────────────────────────────────────────────
   # REACT FRONTEND

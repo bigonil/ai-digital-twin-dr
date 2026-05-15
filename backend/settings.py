@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     api_secret_key: Optional[str] = None  # If set, API key auth is enabled
     rate_limit_per_minute: int = 60  # Default: 60 requests per minute per IP
 
+    # Observability
+    otel_endpoint: Optional[str] = None  # e.g. "http://jaeger:4317" — empty disables tracing
+
     class Config:
         env_file = ".env"
         extra = "ignore"
