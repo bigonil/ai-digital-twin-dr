@@ -56,7 +56,7 @@ _STATIC_STEPS_BY_STRATEGY = {
 
 async def _call_ollama_llm(prompt: str, base_url: str, model: str) -> str:
     """Call Ollama /api/generate for text generation."""
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=300) as client:
         resp = await client.post(
             f"{base_url}/api/generate",
             json={"model": model, "prompt": prompt, "stream": False},
@@ -66,40 +66,16 @@ async def _call_ollama_llm(prompt: str, base_url: str, model: str) -> str:
 
 
 def _build_llm_prompt(node: dict, deps: list[dict], doc_context: str) -> str:
-    dep_list = "\n".join(f"  - {d['name']} ({d['type']})" for d in deps[:10])
-    return f"""You are a senior SRE engineer writing a disaster recovery runbook.
+    dep_names = ", ".join(d['name'] for d in deps[:5]) or "none"
+    return f"""You are an SRE writing a disaster recovery runbook. Respond ONLY with valid JSON, no explanation.
 
-## Failed Component
-- Name: {node.get('name', 'unknown')}
-- Type: {node.get('type', 'unknown')}
-- Recovery Strategy: {node.get('recovery_strategy', 'generic')}
-- RTO Target: {node.get('rto_minutes', 'N/A')} minutes
-- RPO Target: {node.get('rpo_minutes', 'N/A')} minutes
-- Region: {node.get('region', 'unknown')}
+Node: {node.get('name')} | Type: {node.get('type')} | Strategy: {node.get('recovery_strategy', 'generic')} | RTO: {node.get('rto_minutes')}min | Region: {node.get('region')}
+Affected downstream: {dep_names}
 
-## Direct Downstream Dependencies (will be affected)
-{dep_list if dep_list else '  None detected'}
+Return JSON:
+{{"summary": "one sentence", "steps": [{{"step": 1, "action": "...", "owner": "SRE|DBA|on-call", "estimated_minutes": 5, "commands": []}}]}}
 
-## Relevant Documentation
-{doc_context if doc_context else 'No documentation available.'}
-
-## Instructions
-Generate a concise recovery runbook with:
-1. A one-sentence SUMMARY of the incident and recovery approach.
-2. Numbered STEPS (5-8 steps max), each with:
-   - action: what to do (imperative sentence)
-   - owner: who does it (SRE, DBA, on-call)
-   - estimated_minutes: realistic time estimate
-   - commands: optional shell/CLI commands (empty list if none)
-
-Respond ONLY with valid JSON in this exact format:
-{{
-  "summary": "...",
-  "steps": [
-    {{"step": 1, "action": "...", "owner": "...", "estimated_minutes": N, "commands": ["..."]}},
-    ...
-  ]
-}}"""
+Generate 5-7 steps specific to this failure."""
 
 
 async def generate_playbook(
@@ -180,7 +156,7 @@ async def generate_playbook(
         log.info("playbook_llm_success", node_id=node_id, steps=len(steps))
 
     except Exception as exc:
-        log.warning("playbook_llm_failed", node_id=node_id, error=str(exc))
+        log.warning("playbook_llm_failed", node_id=node_id, error=str(exc) or type(exc).__name__)
         strategy = node.get("recovery_strategy", "generic") or "generic"
         steps = _STATIC_STEPS_BY_STRATEGY.get(strategy, _STATIC_STEPS_BY_STRATEGY["generic"])
         summary = (

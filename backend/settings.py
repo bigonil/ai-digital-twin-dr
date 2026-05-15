@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_embed_model: str = "nomic-embed-text"
-    ollama_llm_model: str = "llama3.1:8b"
+    ollama_llm_model: str = "gemma3:4b"
 
     log_level: str = "INFO"
     dr_rto_threshold_minutes: int = 60
