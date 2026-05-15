@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import structlog
 
 from api.dependencies import verify_api_key, limiter
+from models.features import RecoveryPlaybook, PlaybookRequest
 from models.graph import (
     AffectedNode,
     DisasterSimulationRequest,
@@ -19,6 +20,8 @@ from models.enhanced_graph import (
 )
 from models.errors import ErrorResponse
 from algorithms.cascading_failure import bfs_with_latency
+from algorithms.cost_estimator import estimate_hourly_cost, estimate_recovery_cost
+from algorithms.playbook_generator import generate_playbook
 from algorithms.rto_rpo_calculator import (
     calculate_effective_rto,
     calculate_effective_rpo,
@@ -197,6 +200,8 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
             distance = node_data.get("distance", 0)
             normalized_step_time_ms = int(distance * (total_duration_ms / max_distance)) if max_distance > 0 else 0
 
+            node_region = node_data.get("region")
+            node_strategy = node_data.get("recovery_strategy", "generic")
             affected_node_list.append(EnhancedAffectedNode(
                 id=node_data["id"],
                 name=node_data["name"],
@@ -207,9 +212,14 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
                 estimated_rpo_minutes=node_data.get("rpo_minutes", 0),
                 effective_rto_minutes=effective_rto,
                 effective_rpo_minutes=effective_rpo,
-                recovery_strategy=node_data.get("recovery_strategy", "generic"),
+                recovery_strategy=node_strategy,
                 monitoring_state=node_data.get("monitoring_state", "unknown"),
                 at_risk=at_risk,
+                region=node_region,
+                hourly_cost_usd=estimate_hourly_cost(node_data["type"], node_region),
+                recovery_cost_usd=estimate_recovery_cost(
+                    node_data["type"], node_region, node_strategy, int(effective_rto)
+                ),
             ))
 
             worst_case_rto = max(worst_case_rto, effective_rto)
@@ -239,7 +249,8 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
                 {"id": node.id},
             )
 
-        log.info("simulate_success", node_id=body.node_id, affected_count=len(affected_node_list))
+        total_cost = round(sum(n.recovery_cost_usd or 0 for n in affected_node_list), 2)
+        log.info("simulate_success", node_id=body.node_id, affected_count=len(affected_node_list), total_cost_usd=total_cost)
         return EnhancedSimulationWithTimeline(
             origin_node_id=body.node_id,
             blast_radius=affected_node_list,
@@ -249,6 +260,7 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
             worst_case_rto_minutes=worst_case_rto,
             worst_case_rpo_minutes=worst_case_rpo,
             model_version="1.0-accurate",
+            total_recovery_cost_usd=total_cost,
         )
 
     except HTTPException:
@@ -316,6 +328,49 @@ async def check_drift(request: Request):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Drift check failed"
+        )
+
+
+@router.post("/playbook/{node_id}", response_model=RecoveryPlaybook)
+@limiter.limit("10/minute")
+async def generate_recovery_playbook(node_id: str, request: Request, force_regenerate: bool = False):
+    """
+    Generate an LLM-powered recovery playbook for a node.
+    Uses Ollama for text generation, Qdrant docs for context, Neo4j for topology.
+    Falls back to static runbook if LLM is unavailable.
+    """
+    try:
+        check = await request.app.state.neo4j.run(
+            "MATCH (n {id: $id}) RETURN n.id LIMIT 1", {"id": node_id}
+        )
+        if not check:
+            log.warning("playbook_node_not_found", node_id=node_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Node '{node_id}' not found"
+            )
+
+        from settings import Settings
+        settings = Settings()
+        playbook = await generate_playbook(
+            node_id=node_id,
+            neo4j=request.app.state.neo4j,
+            qdrant=request.app.state.qdrant,
+            settings=settings,
+            include_docs=True,
+            force_regenerate=force_regenerate,
+        )
+        log.info("playbook_generated", node_id=node_id, source=playbook.generation_source)
+        return playbook
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("playbook_error", node_id=node_id, error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Playbook generation failed"
         )
 
 

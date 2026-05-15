@@ -1,5 +1,8 @@
 """Metrics API — live health from VictoriaMetrics + Neo4j sync."""
-from fastapi import APIRouter, HTTPException, Request, status
+from datetime import datetime, timedelta
+from typing import Literal
+from fastapi import APIRouter, HTTPException, Query, Request, status
+from pydantic import BaseModel
 import structlog
 
 from api.dependencies import limiter
@@ -7,6 +10,24 @@ from models.graph import HealthStatus, ResourceStatus
 
 log = structlog.get_logger()
 router = APIRouter()
+
+_METRIC_PROMQL = {
+    "cpu": 'node_cpu_usage_percent{{node_id="{}"}}',
+    "memory": 'node_memory_usage_percent{{node_id="{}"}}',
+    "replication_lag": 'replication_lag_seconds{{node_id="{}"}}',
+}
+
+
+class MetricPoint(BaseModel):
+    timestamp: float  # Unix epoch seconds
+    value: float
+
+
+class MetricsRangeResponse(BaseModel):
+    node_id: str
+    metric: str
+    points: list[MetricPoint]
+    source: str  # "victoriametrics" or "mock"
 
 
 @router.get("/health/{node_id}", response_model=HealthStatus)
@@ -59,6 +80,53 @@ async def node_health(node_id: str, request: Request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch node health"
         )
+
+
+@router.get("/range", response_model=MetricsRangeResponse)
+async def get_metrics_range(
+    request: Request,
+    node_id: str = Query(..., description="Node ID to query"),
+    metric: Literal["cpu", "memory", "replication_lag"] = Query("cpu"),
+    hours: int = Query(24, ge=1, le=168, description="Lookback window in hours"),
+):
+    """
+    Return historical metric timeseries from VictoriaMetrics.
+    Falls back to empty list if VictoriaMetrics is unavailable.
+    """
+    try:
+        end = datetime.utcnow()
+        start = end - timedelta(hours=hours)
+        promql = _METRIC_PROMQL[metric].format(node_id)
+
+        raw = await request.app.state.vm.query_range(
+            promql=promql,
+            start=start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            end=end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            step="5m",
+        )
+
+        points: list[MetricPoint] = []
+        for series in raw:
+            for ts, val in series.get("values", []):
+                try:
+                    points.append(MetricPoint(timestamp=float(ts), value=float(val)))
+                except (TypeError, ValueError):
+                    pass
+
+        log.info("metrics_range_success", node_id=node_id, metric=metric, points=len(points))
+        return MetricsRangeResponse(
+            node_id=node_id,
+            metric=metric,
+            points=sorted(points, key=lambda p: p.timestamp),
+            source="victoriametrics",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.warning("metrics_range_fallback", node_id=node_id, metric=metric, error=str(exc), request_id=request_id)
+        return MetricsRangeResponse(node_id=node_id, metric=metric, points=[], source="unavailable")
 
 
 @router.get("/replication-lag")

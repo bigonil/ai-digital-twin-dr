@@ -10,6 +10,7 @@
 
 import React, { useState, useMemo, memo } from 'react'
 import { ChevronDown } from 'lucide-react'
+import PlaybookPanel from './PlaybookPanel.jsx'
 
 /**
  * Derive root cause description from origin node type
@@ -133,9 +134,14 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] } })
     <div className="shrink-0 bg-dt-surface border-t border-dt-border overflow-y-auto max-h-64 flex flex-col">
       <div className="sticky top-0 bg-dt-bg border-b border-dt-border px-4 py-2 flex items-center justify-between">
         <h2 className="text-sm font-mono font-bold text-gray-100">SIMULATION REPORT</h2>
-        <span className="text-xs text-gray-500">
-          {blastRadius.length} nodes affected
-        </span>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span>{blastRadius.length} nodes affected</span>
+          {simulationResult.total_recovery_cost_usd != null && (
+            <span className="text-yellow-400 font-mono">
+              ~${simulationResult.total_recovery_cost_usd.toLocaleString()} recovery cost
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -193,6 +199,11 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] } })
                       <td className="text-right px-2 py-1 font-mono text-cyan-400">
                         {node.estimated_rpo_minutes || 'N/A'}
                       </td>
+                      {node.recovery_cost_usd != null && (
+                        <td className="text-right px-2 py-1 font-mono text-yellow-400">
+                          ${node.recovery_cost_usd}
+                        </td>
+                      )}
                     </tr>
                   ))}
               </tbody>
@@ -224,7 +235,17 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] } })
           <div className="text-xs text-gray-300 leading-relaxed">{rootCause}</div>
         </ReportSection>
 
-        {/* Section 5: Mitigation & Recommendations */}
+        {/* Section 5: LLM Recovery Playbook */}
+        {simulationResult.origin_node_id && (
+          <ReportSection title="AI RECOVERY PLAYBOOK" defaultOpen={false}>
+            <PlaybookPanel
+              nodeId={simulationResult.origin_node_id}
+              nodeName={originNode?.name || simulationResult.origin_node_id}
+            />
+          </ReportSection>
+        )}
+
+        {/* Section 6: Mitigation & Recommendations */}
         <ReportSection title="MITIGATION ACTIONS & RECOMMENDATIONS" defaultOpen={false}>
           <div className="space-y-3">
             {/* Recovery steps from API */}

@@ -140,3 +140,17 @@ export const createPostmortem = (payload) =>
 
 export const getPostmortem = (id) =>
   api.get(`/postmortem/reports/${id}`).then(r => r.data)
+
+// ============================================================================
+// RECOVERY PLAYBOOKS (LLM-GENERATED)
+// ============================================================================
+
+export const generatePlaybook = (nodeId, forceRegenerate = false) =>
+  api.post(`/dr/playbook/${nodeId}?force_regenerate=${forceRegenerate}`).then(r => r.data)
+
+// ============================================================================
+// METRICS RANGE (HISTORICAL)
+// ============================================================================
+
+export const getMetricsRange = (nodeId, metric, hours = 24) =>
+  api.get(`/metrics/range`, { params: { node_id: nodeId, metric, hours } }).then(r => r.data)

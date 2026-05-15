@@ -181,3 +181,41 @@ class PostmortemReport(BaseModel):
     simulation_used: Optional[dict] = None  # SimulationWithTimeline if available
     recommendations: list[str]
     created_at: str  # ISO timestamp
+
+
+# ============================================================================
+# RECOVERY PLAYBOOK (LLM-GENERATED)
+# ============================================================================
+
+class PlaybookStep(BaseModel):
+    """A single step in a recovery playbook"""
+    step: int
+    action: str
+    owner: str = "on-call"  # e.g., "DBA", "SRE", "on-call"
+    estimated_minutes: Optional[int] = None
+    commands: list[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+
+
+class RecoveryPlaybook(BaseModel):
+    """LLM-generated recovery runbook for a node failure"""
+    playbook_id: str
+    node_id: str
+    node_name: str
+    node_type: str
+    recovery_strategy: str
+    rto_minutes: Optional[int] = None
+    rpo_minutes: Optional[int] = None
+    generated_at: str  # ISO timestamp
+    summary: str
+    steps: list[PlaybookStep]
+    doc_references: list[str] = Field(default_factory=list)  # Qdrant source_files used
+    llm_model: str
+    generation_source: str = "llm"  # "llm" or "static"
+
+
+class PlaybookRequest(BaseModel):
+    """Request to generate a recovery playbook"""
+    node_id: str
+    include_docs: bool = True  # search Qdrant for relevant docs
+    force_regenerate: bool = False  # bypass cache

@@ -43,7 +43,7 @@ class EnhancedInfraNode(BaseModel):
 
 
 class EnhancedAffectedNode(BaseModel):
-    """Affected node in disaster simulation with effective RTO/RPO"""
+    """Affected node in disaster simulation with effective RTO/RPO and cost estimate"""
     id: str
     name: str
     type: str
@@ -56,6 +56,10 @@ class EnhancedAffectedNode(BaseModel):
     recovery_strategy: RecoveryStrategy
     monitoring_state: MonitoringState
     at_risk: bool = False
+    # Cost estimation fields
+    hourly_cost_usd: Optional[float] = None
+    recovery_cost_usd: Optional[float] = None
+    region: Optional[str] = None
 
     model_config = ConfigDict(use_enum_values=False)
 
@@ -71,7 +75,7 @@ class TimelineStep(BaseModel):
 
 
 class EnhancedSimulationWithTimeline(BaseModel):
-    """Complete simulation response with timeline"""
+    """Complete simulation response with timeline and cost estimates"""
     origin_node_id: str
     blast_radius: List[EnhancedAffectedNode]
     timeline_steps: List[TimelineStep]
@@ -81,3 +85,5 @@ class EnhancedSimulationWithTimeline(BaseModel):
     worst_case_rpo_minutes: float
     model_version: str = "1.0-accurate"
     validation_score: Optional[float] = None
+    # Aggregated cost across all affected nodes
+    total_recovery_cost_usd: Optional[float] = None
