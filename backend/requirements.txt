@@ -28,3 +28,9 @@ mcp==1.24.0
 
 # Metrics exposition
 prometheus-fastapi-instrumentator==7.0.0
+
+# Rate limiting
+slowapi==0.1.9
+
+# Auth tokens
+python-jose[cryptography]==3.3.0

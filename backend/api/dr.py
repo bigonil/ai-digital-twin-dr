@@ -1,7 +1,10 @@
 """Disaster Recovery API — simulate, plan, drift, search docs."""
-from fastapi import APIRouter, HTTPException, Request
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Request, status, Depends
 from pydantic import BaseModel
+import structlog
 
+from api.dependencies import verify_api_key
 from models.graph import (
     AffectedNode,
     DisasterSimulationRequest,
@@ -14,6 +17,7 @@ from models.enhanced_graph import (
     EnhancedAffectedNode,
     TimelineStep,
 )
+from models.errors import ErrorResponse
 from algorithms.cascading_failure import bfs_with_latency
 from algorithms.rto_rpo_calculator import (
     calculate_effective_rto,
@@ -21,6 +25,8 @@ from algorithms.rto_rpo_calculator import (
     apply_monitoring_state_impact,
 )
 from parsers.docs import _embed
+
+log = structlog.get_logger()
 
 router = APIRouter()
 
@@ -49,7 +55,11 @@ async def search_docs(body: DocSearchRequest, request: Request):
     Embeds query text and searches Qdrant for similar chunks.
     """
     if not body.query or len(body.query.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Query must be at least 3 characters")
+        log.warning("search_invalid_query", query=body.query)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query must be at least 3 characters"
+        )
 
     try:
         # Embed query text
@@ -73,10 +83,18 @@ async def search_docs(body: DocSearchRequest, request: Request):
                 title=payload.get("title", "")
             ))
 
+        log.info("search_success", query=body.query, result_count=len(results))
         return DocSearchResponse(results=results)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("search_error", query=body.query, error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Search failed"
+        )
 
 
 def _calculate_step_times(affected_nodes: list[AffectedNode], total_duration_ms: int = 5000) -> tuple[list[AffectedNode], int, list[dict]]:
@@ -128,14 +146,19 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
     Simulate cascading failure with enhanced timing and RTO/RPO.
     Uses BFS with latency accumulation and effective RTO/RPO calculation based on recovery strategies.
     """
-    rows = await request.app.state.neo4j.simulate_disaster(body.node_id, body.depth)
-
-    if not rows and body.node_id:
+    try:
+        # Validate node_id exists
         check = await request.app.state.neo4j.run(
-            "MATCH (n {id: $id}) RETURN n.id", {"id": body.node_id}
+            "MATCH (n {id: $id}) RETURN n.id LIMIT 1", {"id": body.node_id}
         )
         if not check:
-            raise HTTPException(status_code=404, detail=f"Node {body.node_id!r} not found")
+            log.warning("simulate_node_not_found", node_id=body.node_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Node '{body.node_id}' not found"
+            )
+
+        rows = await request.app.state.neo4j.simulate_disaster(body.node_id, body.depth)
 
     # Get affected nodes using BFS with latency accumulation
     affected_nodes = await bfs_with_latency(
@@ -209,44 +232,89 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         {"id": body.node_id},
     )
 
-    for node in affected_node_list:
-        await request.app.state.neo4j.run(
-            "MATCH (n {id: $id}) SET n.status = 'simulated_failure'",
-            {"id": node.id},
+        for node in affected_node_list:
+            await request.app.state.neo4j.run(
+                "MATCH (n {id: $id}) SET n.status = 'simulated_failure'",
+                {"id": node.id},
+            )
+
+        log.info("simulate_success", node_id=body.node_id, affected_count=len(affected_node_list))
+        return EnhancedSimulationWithTimeline(
+            origin_node_id=body.node_id,
+            blast_radius=affected_node_list,
+            timeline_steps=timeline_steps,
+            max_distance=max((n.distance for n in affected_node_list), default=0),
+            total_duration_ms=5000,
+            worst_case_rto_minutes=worst_case_rto,
+            worst_case_rpo_minutes=worst_case_rpo,
+            model_version="1.0-accurate",
         )
 
-    return EnhancedSimulationWithTimeline(
-        origin_node_id=body.node_id,
-        blast_radius=affected_node_list,
-        timeline_steps=timeline_steps,
-        max_distance=max((n.distance for n in affected_node_list), default=0),
-        total_duration_ms=5000,
-        worst_case_rto_minutes=worst_case_rto,
-        worst_case_rpo_minutes=worst_case_rpo,
-        model_version="1.0-accurate",
-    )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("simulate_error", node_id=body.node_id, error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Simulation failed"
+        )
 
 
 @router.post("/reset/{node_id}")
 async def reset_node(node_id: str, request: Request):
-    await request.app.state.neo4j.run(
-        "MATCH (n {id: $id}) SET n.status = 'healthy'", {"id": node_id}
-    )
-    return {"reset": node_id}
+    """Reset a node from simulated_failure back to healthy status."""
+    try:
+        # Verify node exists
+        check = await request.app.state.neo4j.run(
+            "MATCH (n {id: $id}) RETURN n.id LIMIT 1", {"id": node_id}
+        )
+        if not check:
+            log.warning("reset_node_not_found", node_id=node_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Node '{node_id}' not found"
+            )
+
+        await request.app.state.neo4j.run(
+            "MATCH (n {id: $id}) SET n.status = 'healthy'", {"id": node_id}
+        )
+        log.info("reset_success", node_id=node_id)
+        return {"reset": node_id}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("reset_error", node_id=node_id, error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Reset failed"
+        )
 
 
 @router.get("/drift", response_model=DriftResult)
 async def check_drift(request: Request):
     """Compare Neo4j InfraNodes vs last-known Terraform state (stub)."""
-    graph_nodes = await request.app.state.neo4j.run(
-        "MATCH (n:InfraNode) RETURN n.id AS id"
-    )
-    graph_ids = {r["id"] for r in graph_nodes}
-    return DriftResult(
-        nodes_in_graph_only=sorted(graph_ids),
-        nodes_in_terraform_only=[],
-        drifted_properties=[],
-    )
+    try:
+        graph_nodes = await request.app.state.neo4j.run(
+            "MATCH (n:InfraNode) RETURN n.id AS id"
+        )
+        graph_ids = {r["id"] for r in graph_nodes}
+        log.info("drift_check", node_count=len(graph_ids))
+        return DriftResult(
+            nodes_in_graph_only=sorted(graph_ids),
+            nodes_in_terraform_only=[],
+            drifted_properties=[],
+        )
+
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("drift_error", error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Drift check failed"
+        )
 
 
 def _basic_recovery_steps(origin: str, affected: list[AffectedNode]) -> list[str]:

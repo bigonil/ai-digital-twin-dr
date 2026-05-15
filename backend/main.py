@@ -10,6 +10,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api import dr, graph, metrics, compliance, whatif, chaos, postmortem
@@ -21,6 +24,9 @@ from settings import Settings
 
 settings = Settings()
 log = structlog.get_logger()
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -63,6 +69,10 @@ app = FastAPI(
     description="Living Digital Twin for Disaster Recovery",
     lifespan=lifespan,
 )
+
+# Attach limiter to app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add RequestId middleware first (closest to response)
 app.add_middleware(RequestIdMiddleware)
