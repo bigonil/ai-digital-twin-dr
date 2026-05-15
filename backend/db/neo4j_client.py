@@ -26,6 +26,8 @@ INDEXES = [
     "CREATE INDEX infra_type IF NOT EXISTS FOR (n:InfraNode) ON (n.type)",
     "CREATE INDEX infra_region IF NOT EXISTS FOR (n:InfraNode) ON (n.region)",
     "CREATE INDEX infra_status IF NOT EXISTS FOR (n:InfraNode) ON (n.status)",
+    "CREATE INDEX infra_recovery_strategy IF NOT EXISTS FOR (n:InfraNode) ON (n.recovery_strategy)",
+    "CREATE INDEX infra_monitoring_state IF NOT EXISTS FOR (n:InfraNode) ON (n.monitoring_state)",
 ]
 
 

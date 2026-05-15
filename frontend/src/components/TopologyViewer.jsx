@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { ChevronRight } from 'lucide-react'
 
 const TYPE_ICON = {
@@ -19,7 +19,7 @@ const STATUS_BG = {
   unknown: 'bg-gray-900/30',
 }
 
-export default function TopologyViewer({ topology, selectedNode, onNodeSelect }) {
+function TopologyViewer({ topology, selectedNode, onNodeSelect }) {
   const [filter, setFilter] = useState('')
   const [expandedGroups, setExpandedGroups] = useState({})
 
@@ -31,17 +31,25 @@ export default function TopologyViewer({ topology, selectedNode, onNodeSelect })
     )
   }
 
-  const filteredNodes = topology.nodes.filter(n =>
-    n.name.toLowerCase().includes(filter.toLowerCase()) ||
-    n.type.toLowerCase().includes(filter.toLowerCase())
+  // Memoized filtered nodes
+  const filteredNodes = useMemo(() =>
+    topology.nodes.filter(n =>
+      n.name.toLowerCase().includes(filter.toLowerCase()) ||
+      n.type.toLowerCase().includes(filter.toLowerCase())
+    ),
+    [topology.nodes, filter]
   )
 
-  const grouped = filteredNodes.reduce((acc, node) => {
-    const key = node.type || 'unknown'
-    if (!acc[key]) acc[key] = []
-    acc[key].push(node)
-    return acc
-  }, {})
+  // Memoized grouping
+  const grouped = useMemo(() =>
+    filteredNodes.reduce((acc, node) => {
+      const key = node.type || 'unknown'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(node)
+      return acc
+    }, {}),
+    [filteredNodes]
+  )
 
   const toggleGroup = (type) => {
     setExpandedGroups(prev => ({
@@ -125,3 +133,5 @@ export default function TopologyViewer({ topology, selectedNode, onNodeSelect })
     </div>
   )
 }
+
+export default memo(TopologyViewer)

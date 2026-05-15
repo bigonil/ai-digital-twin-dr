@@ -1,6 +1,17 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, memo } from 'react'
 import { Play, Pause, RotateCcw } from 'lucide-react'
 import { useSimulationPlayback } from '../hooks/useSimulationPlayback'
+
+/**
+ * Format milliseconds to MM:SS.M format
+ */
+function formatTime(ms) {
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  const tenths = Math.floor((ms % 1000) / 100)
+  return `${minutes}:${seconds.toString().padStart(2, '0')}.${tenths}`
+}
 
 /**
  * SimulationTimeline Component
@@ -21,7 +32,7 @@ import { useSimulationPlayback } from '../hooks/useSimulationPlayback'
  *       - rpo_minutes: recovery point objective
  * @param {Function} onTimeChange - Callback(currentTime) when simulation time updates
  */
-export default function SimulationTimeline({ simulationResult, onTimeChange }) {
+function SimulationTimeline({ simulationResult, onTimeChange }) {
   const playback = useSimulationPlayback(simulationResult?.total_duration_ms || 0)
 
   // Notify parent of time changes
@@ -29,28 +40,27 @@ export default function SimulationTimeline({ simulationResult, onTimeChange }) {
     onTimeChange?.(playback.simulationTime)
   }, [playback.simulationTime, onTimeChange])
 
-  // Calculate live stats based on current simulation time
+  // Memoized affected nodes calculation
   const blastRadius = simulationResult?.blast_radius || []
-  const affectedNodes = blastRadius.filter(
-    (node) => node.step_time_ms <= playback.simulationTime
+  const affectedNodes = useMemo(() =>
+    blastRadius.filter((node) => node.step_time_ms <= playback.simulationTime),
+    [blastRadius, playback.simulationTime]
   )
 
-  const worstRto = affectedNodes.length > 0
-    ? Math.max(...affectedNodes.map((n) => n.estimated_rto_minutes || 0))
-    : null
+  // Memoized worst case calculations
+  const worstRto = useMemo(() =>
+    affectedNodes.length > 0
+      ? Math.max(...affectedNodes.map((n) => n.estimated_rto_minutes || 0))
+      : null,
+    [affectedNodes]
+  )
 
-  const worstRpo = affectedNodes.length > 0
-    ? Math.max(...affectedNodes.map((n) => n.estimated_rpo_minutes || 0))
-    : null
-
-  // Format time as MM:SS.M
-  const formatTime = (ms) => {
-    const totalSeconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    const tenths = Math.floor((ms % 1000) / 100)
-    return `${minutes}:${String(seconds).padStart(2, '0')}.${tenths}`
-  }
+  const worstRpo = useMemo(() =>
+    affectedNodes.length > 0
+      ? Math.max(...affectedNodes.map((n) => n.estimated_rpo_minutes || 0))
+      : null,
+    [affectedNodes]
+  )
 
   // Format duration for display
   const durationMs = simulationResult?.total_duration_ms || 0
@@ -165,3 +175,5 @@ export default function SimulationTimeline({ simulationResult, onTimeChange }) {
     </div>
   )
 }
+
+export default memo(SimulationTimeline)

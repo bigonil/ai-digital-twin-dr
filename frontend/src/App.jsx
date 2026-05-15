@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import TopologyViewer from './components/TopologyViewer.jsx'
 import InfrastructureMap from './components/InfrastructureMap.jsx'
@@ -60,29 +60,32 @@ export default function App() {
   const [simulationResult, setSimulationResult] = useState(null)
   const [simulationTime, setSimulationTime] = useState(0)
 
-  // Derived state
-  const isSimulationDone = simulationResult && simulationTime >= (simulationResult.total_duration_ms - 50)
-
   // Fetch topology
   const { data: topology, isLoading } = useQuery({
     queryKey: ['topology'],
     queryFn: getTopology,
   })
 
-  // Handlers
-  const handleSimulation = (result) => {
+  // Memoized derived state
+  const isSimulationDone = useMemo(
+    () => simulationResult && simulationTime >= (simulationResult.total_duration_ms - 50),
+    [simulationResult, simulationTime]
+  )
+
+  // Memoized handlers
+  const handleSimulation = useCallback((result) => {
     setSimulationResult(result)
     setSimulationTime(0)
-  }
+  }, [])
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setSimulationResult(null)
     setSimulationTime(0)
-  }
+  }, [])
 
-  const handleTimeChange = (ms) => {
+  const handleTimeChange = useCallback((ms) => {
     setSimulationTime(ms)
-  }
+  }, [])
 
   return (
     <ErrorBoundary>

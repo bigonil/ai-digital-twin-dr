@@ -10,7 +10,7 @@
  * - Node selection and hover tooltips
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useCallback } from 'react'
 import { computeLayout, getEdgePath, getBezierPath } from '../utils/mapLayout'
 
 const TYPE_ICONS = {
@@ -179,7 +179,7 @@ const ANIMATION_STYLES = `
 .particle-pulse { animation: particle-pulse 0.6s ease-in-out infinite; }
 `
 
-export default function InfrastructureMap({
+function InfrastructureMap({
   topology = { nodes: [], edges: [] },
   simulationResult = null,
   simulationTime = 0,
@@ -269,13 +269,13 @@ export default function InfrastructureMap({
     })
   }, [topology.edges, blastNodeMap, simulationTime, simulationResult])
 
-  // Derive node animating state
-  const getNodeClass = (nodeId) => {
+  // Memoized: derive node animating state
+  const getNodeClass = useCallback((nodeId) => {
     if (activatingIds.has(nodeId)) return 'node-activating'
     if (failedIds.has(nodeId)) return 'node-failed'
     if (blastIds.has(nodeId)) return 'node-healthy'
     return 'node-idle'
-  }
+  }, [activatingIds, failedIds, blastIds])
 
   const SVG_WIDTH = 900
   const SVG_HEIGHT = 580
@@ -562,3 +562,5 @@ export default function InfrastructureMap({
     </div>
   )
 }
+
+export default React.memo(InfrastructureMap)

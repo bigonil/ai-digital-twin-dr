@@ -8,7 +8,7 @@
  * 5. Mitigation Actions + Architecture Recommendations
  */
 
-import React, { useState } from 'react'
+import React, { useState, useMemo, memo } from 'react'
 import { ChevronDown } from 'lucide-react'
 
 /**
@@ -101,10 +101,14 @@ function ReportSection({ title, children, defaultOpen = true }) {
   )
 }
 
-export default function SimulationReport({ simulationResult = null, topology = { nodes: [] } }) {
+function SimulationReport({ simulationResult = null, topology = { nodes: [] } }) {
   if (!simulationResult) return null
 
-  const originNode = topology.nodes.find((n) => n.id === simulationResult.origin_node_id)
+  const originNode = useMemo(
+    () => topology.nodes.find((n) => n.id === simulationResult.origin_node_id),
+    [topology.nodes, simulationResult.origin_node_id]
+  )
+
   const blastRadius = simulationResult.blast_radius || []
   const timelineSteps = simulationResult.timeline_steps || []
   const recoverySteps = simulationResult.recovery_steps || []
@@ -115,12 +119,15 @@ export default function SimulationReport({ simulationResult = null, topology = {
   const archRecs = getRecommendations(originNode?.type)
 
   // Build timeline events from timeline_steps
-  const timelineEvents = timelineSteps.map((step) => ({
-    timeMs: step.step_time_ms,
-    nodeId: step.node_id,
-    nodeName: step.node_name,
-    distance: step.distance,
-  }))
+  const timelineEvents = useMemo(() =>
+    timelineSteps.map((step) => ({
+      timeMs: step.step_time_ms,
+      nodeId: step.node_id,
+      nodeName: step.node_name,
+      distance: step.distance,
+    })),
+    [timelineSteps]
+  )
 
   return (
     <div className="shrink-0 bg-dt-surface border-t border-dt-border overflow-y-auto max-h-64 flex flex-col">
@@ -258,3 +265,5 @@ export default function SimulationReport({ simulationResult = null, topology = {
     </div>
   )
 }
+
+export default memo(SimulationReport)

@@ -10,13 +10,13 @@
  * - Idle state message when no node selected
  */
 
-import React from 'react'
+import React, { memo } from 'react'
 import useNodeMetrics from '../hooks/useNodeMetrics'
 
 /**
  * Sparkline component — renders 12-point history as SVG polyline
  */
-function Sparkline({ data, color = '#3b82f6', height = 24, width = 100 }) {
+const Sparkline = memo(function Sparkline({ data, color = '#3b82f6', height = 24, width = 100 }) {
   if (!data || data.length === 0) return null
 
   const min = Math.min(...data)
@@ -42,12 +42,12 @@ function Sparkline({ data, color = '#3b82f6', height = 24, width = 100 }) {
       />
     </svg>
   )
-}
+})
 
 /**
  * BarGauge component — horizontal bar with color-coded fill
  */
-function BarGauge({ value = 0, max = 100, label = '' }) {
+const BarGauge = memo(function BarGauge({ value = 0, max = 100, label = '' }) {
   const pct = Math.min(100, (value / max) * 100)
   const barColor = pct > 85 ? '#ef4444' : pct > 65 ? '#f59e0b' : '#10b981'
 
@@ -64,12 +64,12 @@ function BarGauge({ value = 0, max = 100, label = '' }) {
       </span>
     </div>
   )
-}
+})
 
 /**
  * MetricValue component — single metric row with icon and value
  */
-function MetricValue({ label, value, unit = '', color = '#94a3b8' }) {
+const MetricValue = memo(function MetricValue({ label, value, unit = '', color = '#94a3b8' }) {
   return (
     <div className="flex justify-between items-center py-1">
       <span className="text-xs text-gray-500">{label}</span>
@@ -79,9 +79,9 @@ function MetricValue({ label, value, unit = '', color = '#94a3b8' }) {
       </span>
     </div>
   )
-}
+})
 
-export default function MetricsDashboard({ selectedNode = null, topology = { nodes: [] } }) {
+function MetricsDashboard({ selectedNode = null, topology = { nodes: [] } }) {
   const metrics = useNodeMetrics(selectedNode)
 
   return (
@@ -222,3 +222,5 @@ export default function MetricsDashboard({ selectedNode = null, topology = { nod
     </aside>
   )
 }
+
+export default memo(MetricsDashboard)

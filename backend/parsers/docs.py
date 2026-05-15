@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from functools import lru_cache
 from pathlib import Path
 from uuid import UUID
 
@@ -22,15 +23,22 @@ settings = Settings()
 CHUNK_SIZE = 512   # characters
 CHUNK_OVERLAP = 64
 
+# Singleton httpx client for Ollama embeddings
+_ollama_client: httpx.AsyncClient | None = None
+# Embedding cache: text → vector
+_embed_cache: dict[str, list[float]] = {}
 
-def _chunk_text(text: str) -> list[str]:
+
+@lru_cache(maxsize=256)
+def _chunk_text(text: str) -> tuple[str, ...]:
+    """Chunk text with overlap. Cached for repeated ingestions."""
     chunks: list[str] = []
     start = 0
     while start < len(text):
         end = start + CHUNK_SIZE
         chunks.append(text[start:end])
         start += CHUNK_SIZE - CHUNK_OVERLAP
-    return [c.strip() for c in chunks if c.strip()]
+    return tuple(c.strip() for c in chunks if c.strip())
 
 
 def _doc_id(file_path: str, chunk_idx: int) -> str:
@@ -38,14 +46,32 @@ def _doc_id(file_path: str, chunk_idx: int) -> str:
     return str(UUID(hashlib.md5(raw.encode()).hexdigest()))
 
 
+async def _get_ollama_client() -> httpx.AsyncClient:
+    """Get or create singleton httpx client for Ollama."""
+    global _ollama_client
+    if _ollama_client is None:
+        _ollama_client = httpx.AsyncClient(timeout=60)
+    return _ollama_client
+
+
 async def _embed(text: str) -> list[float]:
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{settings.ollama_base_url}/api/embeddings",
-            json={"model": settings.ollama_embed_model, "prompt": text},
-        )
-        resp.raise_for_status()
-        return resp.json()["embedding"]
+    """Embed text using Ollama. Results are cached in-memory."""
+    # Check cache first
+    if text in _embed_cache:
+        return _embed_cache[text]
+
+    # Call Ollama embedding API
+    client = await _get_ollama_client()
+    resp = await client.post(
+        f"{settings.ollama_base_url}/api/embeddings",
+        json={"model": settings.ollama_embed_model, "prompt": text},
+    )
+    resp.raise_for_status()
+    vector = resp.json()["embedding"]
+
+    # Cache result
+    _embed_cache[text] = vector
+    return vector
 
 
 async def ingest(docs_dir: str | Path, qdrant_client, neo4j_client=None) -> dict[str, int]:
@@ -58,7 +84,7 @@ async def ingest(docs_dir: str | Path, qdrant_client, neo4j_client=None) -> dict
 
     for md_file in md_files:
         text = md_file.read_text(encoding="utf-8", errors="ignore")
-        chunks = _chunk_text(text)
+        chunks = list(_chunk_text(text))  # Convert tuple to list for indexing
         rel_path = str(md_file.relative_to(base))
 
         points = []

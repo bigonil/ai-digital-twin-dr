@@ -2,20 +2,35 @@
 Digital Twin DR — FastAPI entry point.
 """
 from contextlib import asynccontextmanager
+from datetime import datetime
+from uuid import uuid4
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from api import dr, graph, metrics, compliance, whatif, chaos, postmortem
 from db.neo4j_client import Neo4jClient
 from db.qdrant_client import QdrantClient
 from db.victoriametrics_client import VictoriaMetricsClient
+from models.errors import ErrorResponse
 from settings import Settings
 
 settings = Settings()
 log = structlog.get_logger()
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Add request_id to each request for tracing."""
+
+    async def dispatch(self, request: Request, call_next):
+        request.state.request_id = f"req_{uuid4().hex[:8]}"
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request.state.request_id
+        return response
 
 
 @asynccontextmanager
@@ -49,12 +64,43 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add RequestId middleware first (closest to response)
+app.add_middleware(RequestIdMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for unhandled exceptions."""
+    request_id = getattr(request.state, "request_id", "unknown")
+    timestamp = datetime.utcnow().isoformat() + "Z"
+
+    log.error(
+        "unhandled_exception",
+        request_id=request_id,
+        path=request.url.path,
+        method=request.method,
+        error=str(exc),
+        exception_type=type(exc).__name__,
+    )
+
+    error_response = ErrorResponse(
+        error="INTERNAL_ERROR",
+        message="An internal server error occurred. Please contact support with request ID.",
+        timestamp=timestamp,
+        request_id=request_id,
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content=error_response.model_dump(),
+    )
 
 Instrumentator().instrument(app).expose(app)
 
