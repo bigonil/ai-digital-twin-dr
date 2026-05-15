@@ -1,4 +1,4 @@
-# 🔮 CASSANDRA — Predictive Resilience Engine
+# 🔮 ATHENA — Predictive Resilience Engine
 
 > **A living predictive engine for your cloud infrastructure.**  
 > Map Terraform resources, source code, and documentation into a unified graph — then simulate failure scenarios and generate recovery playbooks in seconds.
@@ -9,7 +9,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    CASSANDRA — Predictive Resilience Engine                  │
+│                    ATHENA — Predictive Resilience Engine                  │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │                     React Frontend  (:3001)                          │   │
