@@ -21,11 +21,21 @@ export default function ComplianceDashboard() {
     onSuccess: () => {
       refetch()
     },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Audit failed'
+      alert(`❌ ${message}`)
+      console.error('Audit error:', error)
+    },
   })
 
   // Download mutation
   const downloadMutation = useMutation({
     mutationFn: client.downloadComplianceReport,
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Download failed'
+      alert(`❌ ${message}`)
+      console.error('Download error:', error)
+    },
   })
 
   const handleRunAudit = () => {
@@ -45,9 +55,20 @@ export default function ComplianceDashboard() {
   }
 
   if (auditMutation.isError) {
+    const errorMsg = auditMutation.error?.userMessage || auditMutation.error?.message || 'Unknown error'
     return (
-      <div className="p-6 text-red-400 font-mono text-sm">
-        Error: {auditMutation.error?.message}
+      <div className="p-6 bg-red-900/20 border border-red-700 rounded text-red-400 font-mono text-sm">
+        <div className="font-bold mb-2">❌ Error</div>
+        <div>{errorMsg}</div>
+        {auditMutation.error?.requestId && (
+          <div className="text-red-500/60 text-xs mt-2">Request ID: {auditMutation.error.requestId}</div>
+        )}
+        <button
+          onClick={() => auditMutation.reset()}
+          className="mt-4 px-3 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-xs"
+        >
+          Dismiss
+        </button>
       </div>
     )
   }

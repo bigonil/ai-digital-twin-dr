@@ -25,6 +25,11 @@ export default function ArchitecturePlanner({ topology }) {
       }
       return client.runWhatIfSimulation(payload)
     },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'What-If simulation failed'
+      alert(`❌ ${message}`)
+      console.error('What-If simulation error:', error)
+    },
   })
 
   const handleAddVirtualNode = () => {

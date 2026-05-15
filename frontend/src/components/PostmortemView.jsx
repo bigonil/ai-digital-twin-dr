@@ -38,6 +38,11 @@ export default function PostmortemView({ topology }) {
       setResult(res)
       return res
     },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Failed to create postmortem report'
+      alert(`❌ ${message}`)
+      console.error('Create postmortem error:', error)
+    },
   })
 
   const allNodeIds = topology?.nodes?.map(n => n.id) || []

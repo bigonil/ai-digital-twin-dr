@@ -35,6 +35,11 @@ export default function ChaosDashboard({ topology }) {
       setTab('list')
       refetchExps()
     },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Failed to create chaos experiment'
+      alert(`❌ ${message}`)
+      console.error('Create experiment error:', error)
+    },
   })
 
   // Submit actuals mutation
@@ -54,6 +59,11 @@ export default function ChaosDashboard({ topology }) {
       setActualNotes('')
       refetchExps()
     },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Failed to submit actuals'
+      alert(`❌ ${message}`)
+      console.error('Submit actuals error:', error)
+    },
   })
 
   // Delete experiment mutation
@@ -64,6 +74,11 @@ export default function ChaosDashboard({ topology }) {
     onSuccess: () => {
       setSelectedExperiment(null)
       refetchExps()
+    },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Failed to delete chaos experiment'
+      alert(`❌ ${message}`)
+      console.error('Delete experiment error:', error)
     },
   })
 

@@ -19,6 +19,11 @@ export default function DisasterPanel({ selectedNode, onSimulationResult, onRese
       // Pass the full SimulationWithTimeline object to parent
       onSimulationResult(data)
     },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Simulation failed'
+      alert(`❌ ${message}`)
+      console.error('Simulation error:', error)
+    },
   })
 
   const resetMutation = useMutation({
@@ -26,6 +31,11 @@ export default function DisasterPanel({ selectedNode, onSimulationResult, onRese
     onSuccess: () => {
       onReset()
       qc.invalidateQueries({ queryKey: ['topology'] })
+    },
+    onError: (error) => {
+      const message = error.userMessage || error.message || 'Reset failed'
+      alert(`❌ ${message}`)
+      console.error('Reset error:', error)
     },
   })
 

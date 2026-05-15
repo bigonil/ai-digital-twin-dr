@@ -2,6 +2,61 @@ import axios from 'axios'
 
 const api = axios.create({ baseURL: '/api' })
 
+/**
+ * Response interceptor to extract user-friendly error messages.
+ * Catches error responses and re-throws with enhanced error object.
+ */
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // If error has a response from server (4xx, 5xx)
+    if (error.response) {
+      const { status, data } = error.response
+      const message = data?.message || data?.detail || 'An error occurred'
+      const errorCode = data?.error || 'ERROR'
+      const requestId = data?.request_id || 'unknown'
+
+      // Create enhanced error object with user-friendly message
+      const enhancedError = new Error(message)
+      enhancedError.status = status
+      enhancedError.code = errorCode
+      enhancedError.requestId = requestId
+      enhancedError.details = data
+
+      // Log error details for debugging
+      console.error(`[${errorCode}] ${message} (req: ${requestId})`, data)
+
+      // Show user-friendly toast/alert based on status
+      if (status === 404) {
+        enhancedError.userMessage = `Resource not found: ${message}`
+      } else if (status === 400) {
+        enhancedError.userMessage = `Invalid request: ${message}`
+      } else if (status === 403) {
+        enhancedError.userMessage = `Access denied: ${message}`
+      } else if (status === 429) {
+        enhancedError.userMessage = `Too many requests. Please wait before retrying.`
+      } else if (status >= 500) {
+        enhancedError.userMessage = `Server error: ${message}. Please contact support with request ID: ${requestId}`
+      } else {
+        enhancedError.userMessage = message
+      }
+
+      return Promise.reject(enhancedError)
+    }
+
+    // Network error or no response from server
+    if (error.request) {
+      error.userMessage = 'Network error: Unable to reach the server. Please check your connection.'
+      console.error('Network error:', error.message)
+    } else {
+      error.userMessage = 'An unexpected error occurred. Please try again.'
+      console.error('Error:', error.message)
+    }
+
+    return Promise.reject(error)
+  }
+)
+
 export const getTopology = () =>
   api.get('/graph/topology').then(r => r.data)
 
