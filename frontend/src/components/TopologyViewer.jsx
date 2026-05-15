@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, memo } from 'react'
 import { ChevronRight } from 'lucide-react'
 
 const TYPE_ICON = {
