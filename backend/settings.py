@@ -10,6 +10,9 @@ class Settings(BaseSettings):
 
     qdrant_url: str = "http://qdrant:6333"
 
+    redis_url: str = "redis://localhost:6379"
+    simulation_cache_ttl_seconds: int = 3600  # 1 hour default TTL
+
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_embed_model: str = "nomic-embed-text"
     ollama_llm_model: str = "llama3.1:8b"

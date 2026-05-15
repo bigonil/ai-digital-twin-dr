@@ -5,6 +5,7 @@ and timeline-aware tools to external AI agents (Claude Code / GitHub Copilot).
 from __future__ import annotations
 
 import asyncio
+from uuid import uuid4
 
 import structlog
 from mcp.server import Server
@@ -13,6 +14,7 @@ from mcp.types import TextContent, Tool
 
 from db.neo4j_client import Neo4jClient
 from db.qdrant_client import QdrantClient
+from db.simulation_cache import SimulationCache, get_simulation_cache
 from settings import Settings
 
 log = structlog.get_logger()
@@ -22,11 +24,7 @@ server = Server("digital-twin-dr")
 
 _neo4j: Neo4jClient | None = None
 _qdrant: QdrantClient | None = None
-
-# Simple in-memory simulation cache
-# In production, use Redis with TTL
-SIMULATION_CACHE = {}
-SIMULATION_COUNTER = 0
+_simulation_cache: SimulationCache | None = None
 
 
 async def _get_neo4j() -> Neo4jClient:
@@ -43,6 +41,13 @@ async def _get_qdrant() -> QdrantClient:
         _qdrant = QdrantClient(settings)
         await _qdrant.connect()
     return _qdrant
+
+
+async def _get_simulation_cache() -> SimulationCache:
+    global _simulation_cache
+    if _simulation_cache is None:
+        _simulation_cache = await get_simulation_cache(settings)
+    return _simulation_cache
 
 
 @server.list_tools()
@@ -149,12 +154,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         affected, max_distance, timeline_steps = _calculate_step_times(affected, total_duration_ms=5000)
 
-        # Cache simulation result
-        global SIMULATION_COUNTER
-        sim_id = f"sim_{SIMULATION_COUNTER}"
-        SIMULATION_COUNTER += 1
+        # Cache simulation result in Redis/Memory
+        sim_id = f"sim_{uuid4().hex[:8]}"
+        cache = await _get_simulation_cache()
 
-        SIMULATION_CACHE[sim_id] = {
+        simulation_data = {
             "node_id": node_id,
             "timeline_steps": timeline_steps,
             "total_duration_ms": 5000,
@@ -171,6 +175,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 for n in affected
             ],
         }
+
+        await cache.set(sim_id, simulation_data)
 
         # Mark origin node and blast radius as simulated_failure in Neo4j
         await neo4j.run(
@@ -250,11 +256,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         sim_id = arguments.get("simulation_id")
         query_time = arguments.get("query_at_time_ms", float("inf"))
 
-        if not sim_id or sim_id not in SIMULATION_CACHE:
+        cache = await _get_simulation_cache()
+        sim_data = await cache.get(sim_id)
+
+        if not sim_id or not sim_data:
             text = f"❌ Simulation '{sim_id}' not found. Run simulate_disaster first."
             return [TextContent(type="text", text=text)]
-
-        sim_data = SIMULATION_CACHE[sim_id]
 
         active_nodes = [
             step for step in sim_data["timeline_steps"] if step["step_time_ms"] <= query_time
@@ -279,11 +286,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         sim_id = arguments.get("simulation_id")
         time_ms = arguments.get("time_ms", 0)
 
-        if not sim_id or sim_id not in SIMULATION_CACHE:
+        cache = await _get_simulation_cache()
+        sim_data = await cache.get(sim_id)
+
+        if not sim_id or not sim_data:
             text = f"❌ Simulation '{sim_id}' not found."
             return [TextContent(type="text", text=text)]
-
-        sim_data = SIMULATION_CACHE[sim_id]
 
         active_nodes = [
             step for step in sim_data["timeline_steps"] if step["step_time_ms"] <= time_ms

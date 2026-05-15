@@ -140,6 +140,35 @@ services:
         condition: service_healthy
 
   # ─────────────────────────────────────────────
+  # REDIS — Simulation Cache
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: dt-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    networks:
+      dt-network:
+        ipv4_address: 172.30.0.14
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
   # FASTAPI BACKEND + MCP SERVER
   # ─────────────────────────────────────────────
   backend:
@@ -158,6 +187,7 @@ services:
       NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
       VICTORIAMETRICS_URL: "http://victoriametrics:8428"
       QDRANT_URL: "http://qdrant:6333"
+      REDIS_URL: "redis://redis:6379"
       # Ollama runs on host machine; Linux requires host-gateway mapping
       OLLAMA_BASE_URL: "http://host.docker.internal:11434"
       OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL}"
@@ -184,6 +214,8 @@ services:
       victoriametrics:
         condition: service_healthy
       qdrant:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
