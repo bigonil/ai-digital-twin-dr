@@ -1,9 +1,12 @@
 """Architecture Planning API — what-if scenario analysis."""
 from uuid import uuid4
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, status
+import structlog
+from api.dependencies import limiter
 from models.features import WhatIfRequest, ScenarioComparison
 from models.graph import SimulationWithTimeline
 
+log = structlog.get_logger()
 router = APIRouter()
 
 
@@ -19,6 +22,7 @@ def _simulate_to_dict(sim: SimulationWithTimeline) -> dict:
 
 
 @router.post("/simulate", response_model=ScenarioComparison)
+@limiter.limit("30/minute")
 async def run_whatif_simulation(body: WhatIfRequest, request: Request):
     """
     Run what-if scenario analysis:
@@ -31,26 +35,37 @@ async def run_whatif_simulation(body: WhatIfRequest, request: Request):
     neo4j = request.app.state.neo4j
     origin = body.origin_node_id
 
-    # Run baseline simulation
-    baseline_rows = await neo4j.simulate_disaster(origin, body.depth)
-    baseline_rtos = [r.get("rto_minutes") for r in baseline_rows if r.get("rto_minutes")]
-    baseline_rpo = [r.get("rpo_minutes") for r in baseline_rows if r.get("rpo_minutes")]
-    baseline_worst_rto = max(baseline_rtos) if baseline_rtos else None
-    baseline_worst_rpo = max(baseline_rpo) if baseline_rpo else None
-    baseline_blast_size = len(baseline_rows)
-
-    baseline_sim = SimulationWithTimeline(
-        origin_node_id=origin,
-        blast_radius=[],
-        total_affected=baseline_blast_size,
-        worst_case_rto_minutes=baseline_worst_rto,
-        worst_case_rpo_minutes=baseline_worst_rpo,
-        recovery_steps=[],
-        max_distance=0,
-        total_duration_ms=0,
-    )
-
     try:
+        # Validate origin node exists
+        check = await neo4j.run(
+            "MATCH (n {id: $id}) RETURN n.id LIMIT 1", {"id": origin}
+        )
+        if not check:
+            log.warning("whatif_origin_node_not_found", node_id=origin)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Origin node '{origin}' not found"
+            )
+
+        # Run baseline simulation
+        baseline_rows = await neo4j.simulate_disaster(origin, body.depth)
+        baseline_rtos = [r.get("rto_minutes") for r in baseline_rows if r.get("rto_minutes")]
+        baseline_rpo = [r.get("rpo_minutes") for r in baseline_rows if r.get("rpo_minutes")]
+        baseline_worst_rto = max(baseline_rtos) if baseline_rtos else None
+        baseline_worst_rpo = max(baseline_rpo) if baseline_rpo else None
+        baseline_blast_size = len(baseline_rows)
+
+        baseline_sim = SimulationWithTimeline(
+            origin_node_id=origin,
+            blast_radius=[],
+            total_affected=baseline_blast_size,
+            worst_case_rto_minutes=baseline_worst_rto,
+            worst_case_rpo_minutes=baseline_worst_rpo,
+            recovery_steps=[],
+            max_distance=0,
+            total_duration_ms=0,
+        )
+
         # Merge virtual nodes
         for vnode in body.virtual_nodes:
             node_data = {
@@ -69,7 +84,11 @@ async def run_whatif_simulation(body: WhatIfRequest, request: Request):
         for vedge in body.virtual_edges:
             # Validate edge type
             if vedge.type not in {"DEPENDS_ON", "INTERACTS_WITH", "DOCUMENTED_BY", "STORES_IN", "READS_FROM", "WRITES_TO", "DEPLOYED_ON"}:
-                raise ValueError(f"Invalid relationship type: {vedge.type}")
+                log.warning("whatif_invalid_edge_type", edge_type=vedge.type)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid relationship type: {vedge.type}"
+                )
             await neo4j.merge_edge(vedge.source, vedge.target, vedge.type)
 
         # Run proposed simulation
@@ -112,8 +131,21 @@ async def run_whatif_simulation(body: WhatIfRequest, request: Request):
             virtual_edges_added=len(body.virtual_edges),
         )
 
+        log.info("whatif_simulation_success", origin_node_id=origin, virtual_nodes=len(body.virtual_nodes))
         return comparison
 
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("whatif_simulation_error", origin_node_id=origin, error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="What-if simulation failed"
+        )
     finally:
         # Cleanup: delete all virtual nodes
-        await neo4j.run("MATCH (n:InfraNode) WHERE n.id STARTS WITH 'virtual-' DETACH DELETE n")
+        try:
+            await neo4j.run("MATCH (n:InfraNode) WHERE n.id STARTS WITH 'virtual-' DETACH DELETE n")
+        except Exception as exc:
+            log.warning("whatif_cleanup_error", error=str(exc))

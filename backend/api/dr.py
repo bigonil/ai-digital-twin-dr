@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Request, status, Depends
 from pydantic import BaseModel
 import structlog
 
-from api.dependencies import verify_api_key
+from api.dependencies import verify_api_key, limiter
 from models.graph import (
     AffectedNode,
     DisasterSimulationRequest,
@@ -141,6 +141,7 @@ def _calculate_step_times(affected_nodes: list[AffectedNode], total_duration_ms:
 
 
 @router.post("/simulate", response_model=EnhancedSimulationWithTimeline)
+@limiter.limit("30/minute")
 async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
     """
     Simulate cascading failure with enhanced timing and RTO/RPO.
@@ -262,6 +263,7 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
 
 
 @router.post("/reset/{node_id}")
+@limiter.limit("60/minute")
 async def reset_node(node_id: str, request: Request):
     """Reset a node from simulated_failure back to healthy status."""
     try:

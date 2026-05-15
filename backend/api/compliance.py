@@ -1,9 +1,12 @@
 """Compliance & Testing API — RTO/RPO audit, compliance reports."""
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, status
+import structlog
+from api.dependencies import limiter
 from models.features import ComplianceReport, NodeComplianceResult, ComplianceStatus
 from settings import Settings
 
+log = structlog.get_logger()
 router = APIRouter()
 
 
@@ -110,13 +113,23 @@ async def _run_compliance_audit(request: Request) -> ComplianceReport:
 
 
 @router.post("/run", response_model=ComplianceReport)
+@limiter.limit("30/minute")
 async def run_compliance_audit(request: Request):
     """
     Run full compliance audit and cache result.
     """
-    report = await _run_compliance_audit(request)
-    request.app.state.last_compliance_report = report
-    return report
+    try:
+        report = await _run_compliance_audit(request)
+        request.app.state.last_compliance_report = report
+        log.info("compliance_audit_success", nodes_checked=len(report.results))
+        return report
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("compliance_audit_error", error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Compliance audit failed"
+        )
 
 
 @router.get("/report", response_model=ComplianceReport)
@@ -124,9 +137,24 @@ async def get_compliance_report(request: Request):
     """
     Return cached compliance report or 404.
     """
-    if not request.app.state.last_compliance_report:
-        raise HTTPException(status_code=404, detail="No compliance report generated yet. Run /api/compliance/run first.")
-    return request.app.state.last_compliance_report
+    try:
+        if not request.app.state.last_compliance_report:
+            log.warning("compliance_report_not_found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No compliance report generated yet. Run /api/compliance/run first."
+            )
+        log.info("compliance_report_retrieved")
+        return request.app.state.last_compliance_report
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("get_compliance_report_error", error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve compliance report"
+        )
 
 
 @router.get("/export")
@@ -134,11 +162,26 @@ async def export_compliance_report(request: Request):
     """
     Export cached compliance report as JSON download.
     """
-    if not request.app.state.last_compliance_report:
-        raise HTTPException(status_code=404, detail="No compliance report generated yet.")
+    try:
+        if not request.app.state.last_compliance_report:
+            log.warning("compliance_export_not_found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No compliance report generated yet."
+            )
 
-    report = request.app.state.last_compliance_report
-    return {
-        "filename": f"compliance_report_{report.generated_at[:10]}.json",
-        "data": report.model_dump(),
-    }
+        report = request.app.state.last_compliance_report
+        log.info("compliance_export_success")
+        return {
+            "filename": f"compliance_report_{report.generated_at[:10]}.json",
+            "data": report.model_dump(),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        log.error("compliance_export_error", error=str(exc), request_id=request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to export compliance report"
+        )

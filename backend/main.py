@@ -10,12 +10,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api import dr, graph, metrics, compliance, whatif, chaos, postmortem
+from api.dependencies import limiter
 from db.neo4j_client import Neo4jClient
 from db.qdrant_client import QdrantClient
 from db.victoriametrics_client import VictoriaMetricsClient
@@ -24,9 +24,6 @@ from settings import Settings
 
 settings = Settings()
 log = structlog.get_logger()
-
-# Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):

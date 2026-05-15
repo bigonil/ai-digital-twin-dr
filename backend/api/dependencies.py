@@ -4,8 +4,13 @@ FastAPI dependency injection utilities for validation, auth, and rate limiting.
 from typing import Optional
 from fastapi import Header, HTTPException, Request, status
 import structlog
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 log = structlog.get_logger()
+
+# Shared rate limiter instance
+limiter = Limiter(key_func=get_remote_address)
 
 
 async def verify_node_exists(node_id: str, neo4j_client) -> None:
