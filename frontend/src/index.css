@@ -2,13 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design token CSS variables ───────────────────────────────────────────── */
+:root {
+  --dt-bg:      #0a0e1a;
+  --dt-surface: #111827;
+  --dt-border:  #1f2937;
+  --dt-accent:  #3b82f6;
+  --dt-danger:  #ef4444;
+  --dt-warning: #f59e0b;
+  --dt-success: #10b981;
+}
+
+/* Light mode overrides */
+html.light {
+  --dt-bg:      #f8fafc;
+  --dt-surface: #ffffff;
+  --dt-border:  #e2e8f0;
+  --dt-accent:  #2563eb;
+  --dt-danger:  #dc2626;
+  --dt-warning: #d97706;
+  --dt-success: #059669;
+}
+
 body {
-  background-color: #0a0e1a;
+  background-color: var(--dt-bg);
   color: #e5e7eb;
   font-family: 'Inter', system-ui, sans-serif;
   margin: 0;
+  transition: background-color 0.2s, color 0.2s;
 }
 
+html.light body {
+  color: #1e293b;
+}
+
+/* ── Light mode: remap Tailwind gray text ──────────────────────────────────── */
+html.light .text-gray-100 { color: #0f172a; }
+html.light .text-gray-200 { color: #1e293b; }
+html.light .text-gray-300 { color: #334155; }
+html.light .text-gray-400 { color: #475569; }
+html.light .text-gray-500 { color: #64748b; }
+html.light .text-gray-600 { color: #94a3b8; }
+
+/* ── Light mode: remap gray backgrounds ────────────────────────────────────── */
+html.light .bg-gray-800   { background-color: #e2e8f0; }
+html.light .bg-gray-700   { background-color: #cbd5e1; }
+html.light .bg-gray-900   { background-color: #f1f5f9; }
+html.light .hover\:bg-gray-800:hover { background-color: #e2e8f0; }
+html.light .hover\:bg-gray-700:hover { background-color: #cbd5e1; }
+html.light .bg-slate-900\/20 { background-color: rgb(248 250 252 / 0.8); }
+html.light .bg-slate-900\/30 { background-color: rgb(241 245 249 / 0.9); }
+html.light .hover\:bg-slate-800\/30:hover { background-color: rgb(226 232 240 / 0.9); }
+html.light .hover\:bg-slate-900\/30:hover { background-color: rgb(226 232 240 / 0.9); }
+
+/* ── Light mode: borders ────────────────────────────────────────────────────── */
+html.light .border-gray-700 { border-color: #cbd5e1; }
+html.light .border-gray-600 { border-color: #94a3b8; }
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #111827; }
-::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+::-webkit-scrollbar-track { background: var(--dt-surface); }
+::-webkit-scrollbar-thumb { background: var(--dt-border); border-radius: 3px; }

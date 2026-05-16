@@ -9,8 +9,37 @@
  */
 
 import React, { useState, useMemo, memo } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Download } from 'lucide-react'
 import PlaybookPanel from './PlaybookPanel.jsx'
+
+function exportJSON(simulationResult) {
+  const blob = new Blob([JSON.stringify(simulationResult, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `simulation_${simulationResult.origin_node_id}_${new Date().toISOString().split('T')[0]}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportCSV(simulationResult) {
+  const header = ['Hop', 'Node ID', 'Name', 'Type', 'RTO (min)', 'RPO (min)', 'Recovery Cost (USD)']
+  const rows = (simulationResult.blast_radius || [])
+    .sort((a, b) => a.distance - b.distance)
+    .map(n => [
+      n.distance, n.id, n.name, n.type,
+      n.estimated_rto_minutes ?? '', n.estimated_rpo_minutes ?? '',
+      n.recovery_cost_usd ?? '',
+    ])
+  const csv = [header, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `simulation_${simulationResult.origin_node_id}_${new Date().toISOString().split('T')[0]}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 /**
  * Derive root cause description from origin node type
@@ -141,6 +170,20 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] } })
               ~${simulationResult.total_recovery_cost_usd.toLocaleString()} recovery cost
             </span>
           )}
+          <button
+            onClick={() => exportJSON(simulationResult)}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition"
+            title="Export as JSON"
+          >
+            <Download size={12} /> JSON
+          </button>
+          <button
+            onClick={() => exportCSV(simulationResult)}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition"
+            title="Export blast radius as CSV"
+          >
+            <Download size={12} /> CSV
+          </button>
         </div>
       </div>
 

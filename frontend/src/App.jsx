@@ -1,15 +1,18 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Sun, Moon, GitCompare } from 'lucide-react'
 import TopologyViewer from './components/TopologyViewer.jsx'
 import InfrastructureMap from './components/InfrastructureMap.jsx'
 import MetricsDashboard from './components/MetricsDashboard.jsx'
 import DisasterPanel from './components/DisasterPanel.jsx'
 import SimulationTimeline from './components/SimulationTimeline.jsx'
 import SimulationReport from './components/SimulationReport.jsx'
+import SimulationComparison from './components/SimulationComparison.jsx'
 import ComplianceDashboard from './components/ComplianceDashboard.jsx'
 import ArchitecturePlanner from './components/ArchitecturePlanner.jsx'
 import PostmortemView from './components/PostmortemView.jsx'
 import ChaosDashboard from './components/ChaosDashboard.jsx'
+import { useTheme } from './hooks/useTheme.js'
 import { getTopology } from './api/client.js'
 
 // Error Boundary Fallback
@@ -60,6 +63,13 @@ export default function App() {
   const [simulationResult, setSimulationResult] = useState(null)
   const [simulationTime, setSimulationTime] = useState(0)
 
+  // Theme
+  const { isDark, toggleTheme } = useTheme()
+
+  // Simulation comparison: stores up to 2 saved results
+  const [savedSims, setSavedSims] = useState([])   // [{result, label}, ...]
+  const [showComparison, setShowComparison] = useState(false)
+
   // Fetch topology
   const { data: topology, isLoading } = useQuery({
     queryKey: ['topology'],
@@ -83,6 +93,15 @@ export default function App() {
     setSimulationTime(0)
   }, [])
 
+  const handleSaveForCompare = useCallback(() => {
+    if (!simulationResult) return
+    setSavedSims(prev => {
+      const label = `Sim ${String.fromCharCode(65 + prev.length % 2)}: ${simulationResult.origin_node_id}`
+      const next = [...prev, { result: simulationResult, label }]
+      return next.slice(-2)  // keep only last 2
+    })
+  }, [simulationResult])
+
   const handleTimeChange = useCallback((ms) => {
     setSimulationTime(ms)
   }, [])
@@ -99,8 +118,39 @@ export default function App() {
                 Athena — Predictive Resilience Engine
               </span>
             </div>
-            <div className="text-xs text-gray-500 font-mono">
-              {topology ? `${topology.nodes?.length ?? 0} nodes · ${topology.edges?.length ?? 0} edges` : 'Loading…'}
+            <div className="flex items-center gap-3">
+              {/* Comparison controls */}
+              {simulationResult && activeView === 'simulator' && (
+                <button
+                  onClick={handleSaveForCompare}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition"
+                  title="Save this simulation for comparison"
+                >
+                  <GitCompare size={13} />
+                  {savedSims.length === 0 ? 'Save A' : savedSims.length === 1 ? 'Save B' : 'Replace B'}
+                </button>
+              )}
+              {savedSims.length === 2 && (
+                <button
+                  onClick={() => setShowComparison(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-dt-accent hover:bg-blue-500 text-white transition"
+                >
+                  <GitCompare size={13} /> Compare
+                </button>
+              )}
+
+              <span className="text-xs text-gray-500 font-mono">
+                {topology ? `${topology.nodes?.length ?? 0} nodes · ${topology.edges?.length ?? 0} edges` : 'Loading…'}
+              </span>
+
+              {/* Dark/Light mode toggle */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition"
+                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
             </div>
           </div>
 
@@ -186,6 +236,16 @@ export default function App() {
           {activeView === 'chaos' && <ChaosDashboard topology={topology} />}
         </div>
       </div>
+      {/* Simulation Comparison Modal */}
+      {showComparison && savedSims.length === 2 && (
+        <SimulationComparison
+          simA={savedSims[0].result}
+          simB={savedSims[1].result}
+          labelA={savedSims[0].label}
+          labelB={savedSims[1].label}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
     </ErrorBoundary>
   )
 }
