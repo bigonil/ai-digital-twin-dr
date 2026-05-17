@@ -151,11 +151,50 @@ async def _call_claude(prompt: str, settings) -> str:
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     message = await client.messages.create(
         model=settings.anthropic_model,
-        max_tokens=4096,
+        max_tokens=8192,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
+    if message.stop_reason == "max_tokens":
+        log.warning("playbook_claude_truncated", stop_reason="max_tokens")
     return message.content[0].text
+
+
+def _extract_json(raw: str) -> dict:
+    """
+    Extract and parse the JSON object from Claude's response.
+    If the response is truncated (unterminated string/array), salvage all
+    complete steps by truncating at the last fully-closed step object.
+    """
+    json_start = raw.find("{")
+    if json_start < 0:
+        raise ValueError("No JSON object found in response")
+
+    # Happy path: well-formed JSON
+    json_end = raw.rfind("}") + 1
+    candidate = raw[json_start:json_end]
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        pass
+
+    # Salvage path: truncated response — keep only complete step objects.
+    # Find the last occurrence of `},` or `}` that closes a step (heuristic:
+    # the pattern `"estimated_minutes": N }` marks a closed step object).
+    # We rebuild a valid JSON by closing the steps array and outer object.
+    last_complete = candidate.rfind("},\n")
+    if last_complete < 0:
+        last_complete = candidate.rfind("},")
+    if last_complete < 0:
+        raise ValueError("Cannot salvage any complete steps from truncated response")
+
+    salvaged = candidate[: last_complete + 1] + "\n    ]\n}"
+    try:
+        parsed = json.loads(salvaged)
+        log.warning("playbook_json_salvaged", steps_recovered=len(parsed.get("steps", [])))
+        return parsed
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"JSON salvage failed: {exc}") from exc
 
 
 def _parse_steps(raw_steps: list[dict]) -> list[PlaybookStep]:
@@ -256,17 +295,13 @@ async def generate_playbook(
         try:
             prompt = _build_claude_prompt(node, downstream, upstream, doc_context)
             raw = await _call_claude(prompt, settings)
-
-            json_start = raw.find("{")
-            json_end = raw.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                parsed = json.loads(raw[json_start:json_end])
-                summary = parsed.get("summary", "")
-                business_impact = parsed.get("business_impact")
-                risk_assessment = parsed.get("risk_assessment")
-                prerequisites = parsed.get("prerequisites") or []
-                communication_plan = parsed.get("communication_plan") or []
-                steps = _parse_steps(parsed.get("steps", []))
+            parsed = _extract_json(raw)
+            summary = parsed.get("summary", "")
+            business_impact = parsed.get("business_impact")
+            risk_assessment = parsed.get("risk_assessment")
+            prerequisites = parsed.get("prerequisites") or []
+            communication_plan = parsed.get("communication_plan") or []
+            steps = _parse_steps(parsed.get("steps", []))
 
             log.info(
                 "playbook_claude_success",
