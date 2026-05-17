@@ -1,9 +1,9 @@
-"""LLM-powered recovery playbook generation using Ollama + Qdrant context."""
+"""AI-powered recovery playbook generation using Claude API + Qdrant RAG + topology context."""
 import json
 from datetime import datetime
 from uuid import uuid4
 
-import httpx
+import anthropic
 import structlog
 
 from models.features import PlaybookStep, RecoveryPlaybook
@@ -53,29 +53,78 @@ _STATIC_STEPS_BY_STRATEGY = {
     ],
 }
 
+_SYSTEM_PROMPT = (
+    "You are a senior SRE at a cloud-native company specializing in AWS disaster recovery. "
+    "You generate precise, actionable runbooks grounded in the specific infrastructure context provided. "
+    "Always respond with valid JSON only — no markdown, no code fences, no explanation."
+)
 
-async def _call_ollama_llm(prompt: str, base_url: str, model: str) -> str:
-    """Call Ollama /api/generate for text generation."""
-    async with httpx.AsyncClient(timeout=300) as client:
-        resp = await client.post(
-            f"{base_url}/api/generate",
-            json={"model": model, "prompt": prompt, "stream": False},
+
+def _build_claude_prompt(
+    node: dict,
+    downstream: list[dict],
+    upstream: list[dict],
+    doc_context: str,
+) -> str:
+    def _fmt_nodes(nodes: list[dict]) -> str:
+        if not nodes:
+            return "  (none)"
+        return "\n".join(
+            f"  - {n.get('name', n.get('id', '?'))} [{n.get('type', 'unknown')}]"
+            for n in nodes[:12]
         )
-        resp.raise_for_status()
-        return resp.json().get("response", "")
+
+    doc_section = (
+        f"\n## Relevant DR Documentation\n{doc_context[:3000]}"
+        if doc_context.strip()
+        else ""
+    )
+
+    return f"""Generate a disaster recovery runbook for the following infrastructure failure.
+
+## Failed Node
+- Name: {node.get('name')}
+- AWS Resource Type: {node.get('type')}
+- Region: {node.get('region', 'us-east-1')}
+- Recovery Strategy: {node.get('recovery_strategy', 'generic')}
+- RTO Target: {node.get('rto_minutes', 60)} minutes
+- RPO Target: {node.get('rpo_minutes', 15)} minutes
+
+## Topology Impact
+### Downstream Services (directly affected by this failure)
+{_fmt_nodes(downstream)}
+
+### Upstream Dependencies (services this node depends on)
+{_fmt_nodes(upstream)}
+{doc_section}
+
+Return ONLY this JSON (no other text):
+{{
+  "summary": "One-sentence executive summary of the failure scenario and recovery approach",
+  "steps": [
+    {{
+      "step": 1,
+      "action": "Specific, concrete action with resource names where possible",
+      "owner": "on-call|SRE|DBA|platform-team",
+      "estimated_minutes": 5,
+      "commands": ["aws cli or kubectl commands if applicable, empty array if none"]
+    }}
+  ]
+}}
+
+Generate 6-8 steps. Commands must reference the actual resource type ({node.get('type')}) and region ({node.get('region', 'us-east-1')}). Tailor every step to the {node.get('recovery_strategy', 'generic')} strategy."""
 
 
-def _build_llm_prompt(node: dict, deps: list[dict], doc_context: str) -> str:
-    dep_names = ", ".join(d['name'] for d in deps[:5]) or "none"
-    return f"""You are an SRE writing a disaster recovery runbook. Respond ONLY with valid JSON, no explanation.
-
-Node: {node.get('name')} | Type: {node.get('type')} | Strategy: {node.get('recovery_strategy', 'generic')} | RTO: {node.get('rto_minutes')}min | Region: {node.get('region')}
-Affected downstream: {dep_names}
-
-Return JSON:
-{{"summary": "one sentence", "steps": [{{"step": 1, "action": "...", "owner": "SRE|DBA|on-call", "estimated_minutes": 5, "commands": []}}]}}
-
-Generate 5-7 steps specific to this failure."""
+async def _call_claude(prompt: str, settings) -> str:
+    """Call Claude API and return the raw text response."""
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    message = await client.messages.create(
+        model=settings.anthropic_model,
+        max_tokens=2048,
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return message.content[0].text
 
 
 async def generate_playbook(
@@ -87,81 +136,111 @@ async def generate_playbook(
     force_regenerate: bool = False,
 ) -> RecoveryPlaybook:
     """
-    Generate LLM-powered recovery playbook for a node.
-    Returns cached playbook if available (unless force_regenerate=True).
-    Falls back to static steps if LLM is unavailable.
+    Generate AI-powered recovery playbook using Claude API.
+    Context: Neo4j topology (node + upstream/downstream) + Qdrant RAG docs.
+    Falls back to static steps if Claude is unavailable or not configured.
     """
-    cache_key = node_id
-
-    if not force_regenerate and cache_key in _playbook_cache:
+    if not force_regenerate and node_id in _playbook_cache:
         log.info("playbook_cache_hit", node_id=node_id)
-        return _playbook_cache[cache_key]
+        return _playbook_cache[node_id]
 
-    # Fetch node details from Neo4j
+    # ── 1. Fetch node details from Neo4j ──────────────────────────────
     rows = await neo4j.run(
-        "MATCH (n:InfraNode {id: $id}) RETURN n.id AS id, n.name AS name, n.type AS type, "
-        "n.recovery_strategy AS recovery_strategy, n.rto_minutes AS rto_minutes, "
-        "n.rpo_minutes AS rpo_minutes, n.region AS region",
+        "MATCH (n:InfraNode {id: $id}) RETURN "
+        "n.id AS id, n.name AS name, n.type AS type, "
+        "n.recovery_strategy AS recovery_strategy, "
+        "n.rto_minutes AS rto_minutes, n.rpo_minutes AS rpo_minutes, "
+        "n.region AS region",
         {"id": node_id},
     )
     if not rows:
         raise ValueError(f"Node '{node_id}' not found")
     node = rows[0]
 
-    # Fetch direct downstream dependencies
-    dep_rows = await neo4j.run(
-        "MATCH (n {id: $id})-[]->(dep:InfraNode) RETURN dep.name AS name, dep.type AS type LIMIT 10",
+    # ── 2. Topology context: downstream + upstream ─────────────────────
+    downstream = await neo4j.run(
+        "MATCH (n {id: $id})-[]->(dep:InfraNode) "
+        "RETURN dep.name AS name, dep.type AS type, dep.region AS region LIMIT 12",
+        {"id": node_id},
+    )
+    upstream = await neo4j.run(
+        "MATCH (src:InfraNode)-[]->(n {id: $id}) "
+        "RETURN src.name AS name, src.type AS type, src.region AS region LIMIT 12",
         {"id": node_id},
     )
 
-    # Fetch relevant docs from Qdrant
+    # ── 3. Qdrant RAG documentation context ───────────────────────────
     doc_context = ""
     doc_refs: list[str] = []
     if include_docs:
         try:
             from parsers.docs import _embed
-            query = f"disaster recovery runbook for {node.get('type', '')} {node.get('recovery_strategy', '')}"
+            query = (
+                f"disaster recovery runbook {node.get('type', '')} "
+                f"{node.get('recovery_strategy', '')} AWS"
+            )
             vector = await _embed(query)
-            docs = await qdrant.search(vector=vector, limit=3)
+            docs = await qdrant.search(vector=vector, limit=4)
             if docs:
-                doc_context = "\n---\n".join(d["payload"].get("text", "") for d in docs)
-                doc_refs = [d["payload"].get("source_file", "") for d in docs if d.get("payload")]
+                doc_context = "\n---\n".join(
+                    d["payload"].get("text", "") for d in docs
+                )
+                doc_refs = [
+                    d["payload"].get("source_file", "")
+                    for d in docs
+                    if d.get("payload")
+                ]
         except Exception as exc:
             log.warning("playbook_qdrant_search_failed", error=str(exc))
 
-    # Try LLM generation
+    # ── 4. Claude API generation ───────────────────────────────────────
     steps: list[PlaybookStep] = []
     summary = ""
-    llm_model = settings.ollama_llm_model
-    generation_source = "llm"
+    generation_source = "claude"
+    llm_model = settings.anthropic_model
 
-    try:
-        prompt = _build_llm_prompt(node, dep_rows, doc_context)
-        raw_response = await _call_ollama_llm(prompt, settings.ollama_base_url, llm_model)
+    use_claude = bool(settings.anthropic_api_key)
 
-        # Extract JSON from response
-        json_start = raw_response.find("{")
-        json_end = raw_response.rfind("}") + 1
-        if json_start >= 0 and json_end > json_start:
-            parsed = json.loads(raw_response[json_start:json_end])
-            summary = parsed.get("summary", "")
-            for s in parsed.get("steps", []):
-                steps.append(PlaybookStep(
-                    step=s.get("step", len(steps) + 1),
-                    action=s.get("action", ""),
-                    owner=s.get("owner", "on-call"),
-                    estimated_minutes=s.get("estimated_minutes"),
-                    commands=s.get("commands", []),
-                ))
-        log.info("playbook_llm_success", node_id=node_id, steps=len(steps))
+    if use_claude:
+        try:
+            prompt = _build_claude_prompt(node, downstream, upstream, doc_context)
+            raw = await _call_claude(prompt, settings)
 
-    except Exception as exc:
-        log.warning("playbook_llm_failed", node_id=node_id, error=str(exc) or type(exc).__name__)
+            json_start = raw.find("{")
+            json_end = raw.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                parsed = json.loads(raw[json_start:json_end])
+                summary = parsed.get("summary", "")
+                for s in parsed.get("steps", []):
+                    steps.append(PlaybookStep(
+                        step=s.get("step", len(steps) + 1),
+                        action=s.get("action", ""),
+                        owner=s.get("owner", "on-call"),
+                        estimated_minutes=s.get("estimated_minutes"),
+                        commands=s.get("commands", []),
+                    ))
+            log.info(
+                "playbook_claude_success",
+                node_id=node_id,
+                model=llm_model,
+                steps=len(steps),
+            )
+        except Exception as exc:
+            log.warning(
+                "playbook_claude_failed",
+                node_id=node_id,
+                error=str(exc) or type(exc).__name__,
+            )
+            use_claude = False
+
+    # ── 5. Static fallback ─────────────────────────────────────────────
+    if not use_claude or not steps:
         strategy = node.get("recovery_strategy", "generic") or "generic"
         steps = _STATIC_STEPS_BY_STRATEGY.get(strategy, _STATIC_STEPS_BY_STRATEGY["generic"])
         summary = (
             f"Static recovery runbook for {node.get('name', node_id)} "
-            f"using {strategy} strategy. LLM unavailable."
+            f"using {strategy} strategy."
+            + (" Claude API unavailable." if use_claude else "")
         )
         generation_source = "static"
         llm_model = "none"
@@ -182,5 +261,5 @@ async def generate_playbook(
         generation_source=generation_source,
     )
 
-    _playbook_cache[cache_key] = playbook
+    _playbook_cache[node_id] = playbook
     return playbook

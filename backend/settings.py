@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     api_secret_key: Optional[str] = None  # If set, API key auth is enabled
     rate_limit_per_minute: int = 60  # Default: 60 requests per minute per IP
 
+    # Anthropic Claude API
+    anthropic_api_key: Optional[str] = None  # If set, Claude is used for playbook generation
+    anthropic_model: str = "claude-opus-4-7"  # Model used for playbook generation
+
     # Observability
     otel_endpoint: Optional[str] = None  # e.g. "http://jaeger:4317" — empty disables tracing
 
