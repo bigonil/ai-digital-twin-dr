@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ATHENA — Changelog Priority 1→5</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0a0e1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 48px 24px;
+    }
+
+    .container { max-width: 940px; margin: 0 auto; }
+
+    /* ── Header ── */
+    .header {
+      display: flex; align-items: center; gap: 16px;
+      margin-bottom: 40px; padding-bottom: 24px;
+      border-bottom: 1px solid #1f2937;
+    }
+    .header-icon { font-size: 2.5rem; }
+    .header-text h1 {
+      font-size: 1.5rem; font-weight: 700; color: #3b82f6;
+      letter-spacing: 0.05em; text-transform: uppercase;
+      font-family: 'Courier New', monospace;
+    }
+    .header-text p { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
+
+    /* ── Priority block ── */
+    .priority {
+      margin-bottom: 44px;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .priority-header {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 22px;
+      background: #111827;
+      border-bottom: 1px solid #1f2937;
+    }
+
+    .p-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 50%;
+      font-family: 'Courier New', monospace; font-size: 0.85rem; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .p1  { background: #1e3a5f; color: #93c5fd; }
+    .p1x { background: #1a2e52; color: #7dd3fc; }
+    .p2  { background: #14532d; color: #6ee7b7; }
+    .p3  { background: #3b0764; color: #d8b4fe; }
+    .p4  { background: #451a03; color: #fdba74; }
+    .p5  { background: #1c1400; color: #fcd34d; }
+
+    .priority-header-text h2 {
+      font-size: 1rem; font-weight: 700;
+      color: #f1f5f9; font-family: 'Courier New', monospace;
+    }
+    .priority-header-text .meta {
+      font-size: 0.78rem; color: #475569; margin-top: 3px;
+    }
+    .commit-hash {
+      margin-left: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75rem;
+      color: #334155;
+      background: #0a0e1a;
+      border: 1px solid #1f2937;
+      border-radius: 4px;
+      padding: 3px 8px;
+      white-space: nowrap;
+    }
+
+    .priority-body { padding: 20px 22px; background: #0d1118; }
+
+    /* ── Sub-feature ── */
+    .feature { margin-bottom: 20px; }
+    .feature:last-child { margin-bottom: 0; }
+
+    .feature-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.88rem; font-weight: 600; color: #cbd5e1;
+      margin-bottom: 8px;
+    }
+    .feature-icon { font-size: 1rem; }
+
+    .feature-desc {
+      font-size: 0.82rem; color: #94a3b8; line-height: 1.7;
+      margin-bottom: 10px; padding-left: 26px;
+    }
+
+    /* ── File list ── */
+    .file-list {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding-left: 26px;
+    }
+
+    .file-tag {
+      font-family: 'Courier New', monospace; font-size: 0.72rem;
+      border-radius: 4px; padding: 2px 8px;
+      border: 1px solid;
+    }
+    .file-new    { background: #052e16; border-color: #166534; color: #4ade80; }
+    .file-mod    { background: #0c1a2e; border-color: #1d4ed8; color: #93c5fd; }
+    .file-config { background: #1c1400; border-color: #92400e; color: #fbbf24; }
+
+    .file-legend {
+      display: flex; gap: 16px; font-size: 0.72rem; color: #475569;
+      margin-top: 6px; padding-left: 26px;
+    }
+    .file-legend span { display: flex; align-items: center; gap: 4px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-new    { background: #4ade80; }
+    .dot-mod    { background: #93c5fd; }
+    .dot-config { background: #fbbf24; }
+
+    .divider {
+      height: 1px; background: #1f2937;
+      margin: 16px 0;
+    }
+
+    /* ── Summary table ── */
+    .summary {
+      margin-top: 44px;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .summary-header {
+      padding: 14px 22px;
+      background: #111827;
+      border-bottom: 1px solid #1f2937;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem; font-weight: 700;
+      color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    thead th {
+      text-align: left; padding: 9px 14px;
+      color: #475569; font-size: 0.72rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      border-bottom: 1px solid #1f2937;
+    }
+    tbody tr { border-bottom: 1px solid #0f172a; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #111827; }
+    tbody td { padding: 9px 14px; color: #cbd5e1; }
+    .mono { font-family: 'Courier New', monospace; }
+    .tag-new  { color: #4ade80; font-weight: 600; }
+    .tag-mod  { color: #93c5fd; }
+    .tag-cfg  { color: #fbbf24; }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 48px; padding-top: 20px;
+      border-top: 1px solid #1f2937;
+      font-size: 0.75rem; color: #334155;
+      display: flex; justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">🔮</div>
+    <div class="header-text">
+      <h1>ATHENA — Changelog Priority 1 → 5</h1>
+      <p>Tutte le modifiche implementate nelle 5 priorità di sviluppo &mdash; branch <strong style="color:#e2e8f0">01_01_03</strong> &mdash; Maggio 2026</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ PRIORITY 1 — Quick Wins ═══ -->
+  <div class="priority">
+    <div class="priority-header">
+      <div class="p-badge p1">P1</div>
+      <div class="priority-header-text">
+        <h2>Priority 1 — Quick Wins (4 ottimizzazioni)</h2>
+        <div class="meta">15 Maggio 2026 &nbsp;·&nbsp; commit 9cb3d50</div>
+      </div>
+      <div class="commit-hash">9cb3d50</div>
+    </div>
+    <div class="priority-body">
+
+      <!-- QW1 -->
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🗄️</span> QW1 — Neo4j Indices aggiuntivi</div>
+        <div class="feature-desc">
+          Aggiunti 2 nuovi indici sulla label <code>InfraNode</code> per accelerare le query di simulazione:
+          <code>recovery_strategy</code> e <code>monitoring_state</code>.
+          Riduce drasticamente il full-scan durante il BFS di cascading failure.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">backend/db/neo4j_client.py</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- QW2 -->
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🚨</span> QW2 — Unified Error Schema (backend)</div>
+        <div class="feature-desc">
+          Nuovo modello Pydantic <code>ErrorResponse</code> con campi <code>error</code>, <code>message</code>,
+          <code>timestamp</code>, <code>request_id</code>. Global exception handler in <code>main.py</code>
+          che formatta tutte le eccezioni non gestite con schema unificato e request ID tracciabile.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">backend/models/errors.py</span>
+          <span class="file-tag file-mod">backend/main.py</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- QW3 -->
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">⚛️</span> QW3 — React.memo + useCallback</div>
+        <div class="feature-desc">
+          Ottimizzazione re-render React su 5 componenti pesanti. <code>InfrastructureMap</code>,
+          <code>MetricsDashboard</code>, <code>TopologyViewer</code>, <code>SimulationReport</code>
+          e <code>SimulationTimeline</code> wrappati con <code>memo()</code>.
+          Handler in <code>App.jsx</code> stabilizzati con <code>useCallback</code> e
+          computed values con <code>useMemo</code>.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">frontend/src/App.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/InfrastructureMap.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/MetricsDashboard.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/SimulationReport.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/SimulationTimeline.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/TopologyViewer.jsx</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- QW4 -->
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🧠</span> QW4 — Embedding Cache in docs.py</div>
+        <div class="feature-desc">
+          Aggiunta cache dict-based a livello modulo per le chiamate <code>_embed(text)</code>
+          verso Ollama. Singleton <code>httpx.AsyncClient</code> eliminando la creazione di un
+          nuovo client per ogni embedding. <code>@lru_cache(maxsize=256)</code> applicato
+          su <code>_chunk_text</code> (funzione pura).
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">backend/parsers/docs.py</span>
+        </div>
+      </div>
+
+      <div class="file-legend">
+        <span><span class="dot dot-new"></span> Nuovo file</span>
+        <span><span class="dot dot-mod"></span> Modificato</span>
+        <span><span class="dot dot-config"></span> Config/Docker</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════ PRIORITY 1.1 — Redis Cache ═════════ -->
+  <div class="priority">
+    <div class="priority-header">
+      <div class="p-badge p1x">1.1</div>
+      <div class="priority-header-text">
+        <h2>Priority 1.1 — Redis Simulation Cache</h2>
+        <div class="meta">15 Maggio 2026 &nbsp;·&nbsp; commit fea2a5f</div>
+      </div>
+      <div class="commit-hash">fea2a5f</div>
+    </div>
+    <div class="priority-body">
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🔴</span> Redis-backed simulation cache con memory fallback</div>
+        <div class="feature-desc">
+          Classe astratta <code>SimulationCache</code> con due implementazioni:
+          <code>RedisSimulationCache</code> (redis.asyncio, prefix <code>athena:sim:</code>, TTL 1h)
+          e <code>MemorySimulationCache</code> (fallback dict in-memory).
+          Factory function <code>get_simulation_cache(settings)</code> che sceglie automaticamente
+          in base alla disponibilità di Redis. Aggiunto service Redis 7-alpine in Docker Compose
+          con maxmemory 256 MB e policy LRU. Il MCP server usa la nuova cache.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">backend/db/simulation_cache.py</span>
+          <span class="file-tag file-mod">backend/mcp_server/app.py</span>
+          <span class="file-tag file-mod">backend/requirements.txt</span>
+          <span class="file-tag file-mod">backend/settings.py</span>
+          <span class="file-tag file-config">docker-compose.yml</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ PRIORITY 1.2 + 1.3 — Error + Auth ════ -->
+  <div class="priority">
+    <div class="priority-header">
+      <div class="p-badge p1x">1.2</div>
+      <div class="priority-header-text">
+        <h2>Priority 1.2 — Error Handling Consistency (tutti gli endpoint)</h2>
+        <div class="meta">15 Maggio 2026 &nbsp;·&nbsp; commit 45a46da + 6b567a8 + e0453e4</div>
+      </div>
+      <div class="commit-hash">6b567a8</div>
+    </div>
+    <div class="priority-body">
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🛡️</span> Rate Limiting + API Key Auth opzionale (1.3)</div>
+        <div class="feature-desc">
+          SlowAPI limiter configurato in <code>main.py</code> (30 req/min su <code>/simulate</code>,
+          60 req/min globale). Dependency FastAPI <code>verify_api_key</code>: se
+          <code>API_SECRET_KEY</code> non è settato l'auth è disabilitata (pass-through).
+          Header <code>X-API-Key</code> validato su tutti gli endpoint protetti.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">backend/api/dependencies.py</span>
+          <span class="file-tag file-mod">backend/api/dr.py</span>
+          <span class="file-tag file-mod">backend/main.py</span>
+          <span class="file-tag file-mod">backend/requirements.txt</span>
+          <span class="file-tag file-mod">backend/settings.py</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🔧</span> Try/except strutturati su tutti gli endpoint backend</div>
+        <div class="feature-desc">
+          Tutti i router (<code>compliance</code>, <code>dr</code>, <code>graph</code>,
+          <code>whatif</code>, <code>postmortem</code>, <code>metrics</code>) wrappati in
+          try/except con HTTPException tipizzate: 404 per nodo/risorsa non trovata,
+          400 per validation error, 500 per server error. Logging strutturato con
+          <code>request_id</code> su ogni failure per distributed tracing.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">backend/api/compliance.py</span>
+          <span class="file-tag file-mod">backend/api/dr.py</span>
+          <span class="file-tag file-mod">backend/api/graph.py</span>
+          <span class="file-tag file-mod">backend/api/metrics.py</span>
+          <span class="file-tag file-mod">backend/api/postmortem.py</span>
+          <span class="file-tag file-mod">backend/api/whatif.py</span>
+          <span class="file-tag file-mod">backend/main.py</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🌐</span> Frontend error handling + messaggi user-friendly</div>
+        <div class="feature-desc">
+          Axios response interceptor in <code>client.js</code> che legge
+          <code>error.response.data.message</code> e mostra messaggi semantici per ogni
+          status code (404 → "Resource not found", 429 → "Rate limit exceeded", ecc.).
+          Request ID incluso negli alert e loggato in console per correlazione con i server log.
+          Handler <code>onError</code> aggiunti a tutti i componenti React che fanno mutation API.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">frontend/src/api/client.js</span>
+          <span class="file-tag file-mod">frontend/src/components/ArchitecturePlanner.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/ChaosDashboard.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/ComplianceDashboard.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/DisasterPanel.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/PostmortemView.jsx</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ PRIORITY 3 — Feature Gaps ══ -->
+  <div class="priority">
+    <div class="priority-header">
+      <div class="p-badge p2">P3</div>
+      <div class="priority-header-text">
+        <h2>Priority 3 — Feature Gaps (#7 #8 #9 #10)</h2>
+        <div class="meta">15 Maggio 2026 &nbsp;·&nbsp; commit 5272bb0</div>
+      </div>
+      <div class="commit-hash">5272bb0</div>
+    </div>
+    <div class="priority-body">
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🤖</span> #10 — AI Recovery Playbook (LLM + RAG)</div>
+        <div class="feature-desc">
+          Nuovo endpoint <code>POST /api/dr/playbook/{node_id}</code> (rate limit 10 req/min).
+          <code>playbook_generator.py</code>: chiama Ollama (modello <code>gemma3:4b</code>)
+          con contesto RAG da Qdrant. Fallback statico per strategia se LLM non disponibile.
+          Frontend: <code>PlaybookPanel.jsx</code> con step espandibili (owner, durata, comandi shell).
+          Integrato in <code>SimulationReport</code> come sezione "AI RECOVERY PLAYBOOK".
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">backend/algorithms/playbook_generator.py</span>
+          <span class="file-tag file-new">frontend/src/components/PlaybookPanel.jsx</span>
+          <span class="file-tag file-mod">backend/models/features.py</span>
+          <span class="file-tag file-mod">backend/api/dr.py</span>
+          <span class="file-tag file-mod">frontend/src/api/client.js</span>
+          <span class="file-tag file-mod">frontend/src/components/SimulationReport.jsx</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">📊</span> #7 — Baseline Metrics Historical Range</div>
+        <div class="feature-desc">
+          Nuovo endpoint <code>GET /api/metrics/range</code> che interroga VictoriaMetrics
+          con <code>query_range()</code>. Supporta metriche <code>cpu</code>, <code>memory</code>,
+          <code>replication_lag</code> con lookback configurabile (1–168h).
+          Fallback graceful: restituisce <code>source: "unavailable"</code> se VM non raggiungibile.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">backend/api/metrics.py</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">💰</span> #9 — Cost Estimation per Recovery Strategy</div>
+        <div class="feature-desc">
+          Nuovo modulo <code>cost_estimator.py</code>: lookup table costi orari AWS on-demand
+          (11 tipi di risorsa), moltiplicatori regionali (14 regioni), moltiplicatori per
+          strategia di recovery. Formula: <code>hourly × (rto/60) × strategy_mult + €46 ops</code>.
+          Campi <code>hourly_cost_usd</code> e <code>recovery_cost_usd</code> aggiunti
+          a ogni nodo nel blast radius. Campo <code>total_recovery_cost_usd</code> nel
+          risultato di simulazione. Visualizzato nell'header del SimulationReport.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">backend/algorithms/cost_estimator.py</span>
+          <span class="file-tag file-mod">backend/models/enhanced_graph.py</span>
+          <span class="file-tag file-mod">backend/algorithms/cascading_failure.py</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🌍</span> #8 — Multi-Region / Multi-AZ Latency</div>
+        <div class="feature-desc">
+          Nuovo modulo <code>region_latency.py</code> con matrice RTT inter-regione per 15
+          coppie AWS (es. us-east-1 ↔ eu-central-1 = 90ms, us-east-1 ↔ ap-northeast-1 = 180ms).
+          Il BFS di cascading failure (<code>bfs_with_latency</code>) aggiunge overhead geografico
+          per ogni hop cross-region o cross-AZ, rendendo la propagazione temporale realistica.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">backend/algorithms/region_latency.py</span>
+          <span class="file-tag file-mod">backend/algorithms/cascading_failure.py</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════ PRIORITY 4 — Observability ═══════════ -->
+  <div class="priority">
+    <div class="priority-header">
+      <div class="p-badge p4">P4</div>
+      <div class="priority-header-text">
+        <h2>Priority 4 — Observability (#11 #12)</h2>
+        <div class="meta">15 Maggio 2026 &nbsp;·&nbsp; commit 7995fab</div>
+      </div>
+      <div class="commit-hash">7995fab</div>
+    </div>
+    <div class="priority-body">
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🔭</span> #11 — OpenTelemetry Distributed Tracing</div>
+        <div class="feature-desc">
+          Nuovo modulo <code>observability.py</code>: setup OTel SDK con OTLP/gRPC export verso Jaeger.
+          Auto-instrumentazione FastAPI e httpx. Span manuale su ogni query Neo4j con attributi
+          <code>db.statement</code>, <code>db.operation</code>, <code>db.row_count</code>.
+          Jaeger UI disponibile su <code>:16686</code>.
+          Variabile d'ambiente <code>OTEL_ENDPOINT</code> configurabile.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">backend/observability.py</span>
+          <span class="file-tag file-mod">backend/db/neo4j_client.py</span>
+          <span class="file-tag file-mod">backend/main.py</span>
+          <span class="file-tag file-mod">backend/requirements.txt</span>
+          <span class="file-tag file-mod">backend/settings.py</span>
+          <span class="file-tag file-config">docker-compose.yml</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">📈</span> #12 — Custom Prometheus Metrics + Grafana Dashboard</div>
+        <div class="feature-desc">
+          4 metriche custom esposte a <code>/metrics</code>:
+          <code>athena_simulation_latency_seconds</code> (Histogram, label: origin_node_type),
+          <code>athena_neo4j_query_duration_seconds</code> (Histogram, label: query_type),
+          <code>athena_simulation_cache_hits_total</code> (Counter, label: result),
+          <code>athena_affected_nodes_per_simulation</code> (Histogram).
+          Dashboard Grafana provisionata automaticamente con 8 panel:
+          latenza simulazione p50/p95, nodi impattati, durata Neo4j, hit rate cache,
+          request rate HTTP, latenza HTTP p95.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">config/grafana/provisioning/datasources/victoriametrics.yaml</span>
+          <span class="file-tag file-new">config/grafana/provisioning/dashboards/athena-overview.json</span>
+          <span class="file-tag file-new">config/grafana/provisioning/dashboards/dashboards.yaml</span>
+          <span class="file-tag file-mod">backend/observability.py</span>
+          <span class="file-tag file-mod">backend/api/dr.py</span>
+          <span class="file-tag file-config">docker-compose.yml</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════ PRIORITY 5 — UX ═══════════ -->
+  <div class="priority">
+    <div class="priority-header">
+      <div class="p-badge p5">P5</div>
+      <div class="priority-header-text">
+        <h2>Priority 5 — UX (#13 #14 #15)</h2>
+        <div class="meta">16 Maggio 2026 &nbsp;·&nbsp; commit 57f531b + 76841d5 + 61921ad</div>
+      </div>
+      <div class="commit-hash">57f531b</div>
+    </div>
+    <div class="priority-body">
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🌙</span> #13 — Dark Mode Toggle</div>
+        <div class="feature-desc">
+          Sistema di theming completo basato su CSS custom properties (<code>--dt-bg</code>,
+          <code>--dt-surface</code>, <code>--dt-border</code>, ecc.).
+          Hook <code>useTheme.js</code> con persistenza in <code>localStorage</code>.
+          La classe <code>html.light</code> sovrascrive tutte le variabili per il tema chiaro.
+          Bottone toggle (Sun/Moon icon) nell'header dell'app. Tailwind configurato per leggere
+          le variabili CSS anziché hex fissi.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">frontend/src/hooks/useTheme.js</span>
+          <span class="file-tag file-mod">frontend/src/App.jsx</span>
+          <span class="file-tag file-mod">frontend/src/index.css</span>
+          <span class="file-tag file-mod">frontend/tailwind.config.js</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">📥</span> #14 — Simulation Export (JSON / CSV)</div>
+        <div class="feature-desc">
+          Due pulsanti di download nell'header del SimulationReport:
+          <strong>JSON</strong> — esporta il risultato completo della simulazione (tutti i campi API)
+          con filename <code>simulation_{node_id}_{date}.json</code>.
+          <strong>CSV</strong> — esporta il blast radius con colonne:
+          Hop, Node ID, Name, Type, RTO (min), RPO (min), Recovery Cost (EUR).
+          Download via Blob URL, nessun server coinvolto.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">frontend/src/components/SimulationReport.jsx</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">⚖️</span> #15 — Simulation Comparison UI</div>
+        <div class="feature-desc">
+          Modale full-screen per confrontare due simulazioni side-by-side.
+          Bottoni "Save A" / "Save B" nell'header (appaiono dopo ogni simulazione completata).
+          Bottone "Compare" attivo solo quando entrambe le simulazioni sono salvate.
+          Tabella con delta colorati (<span style="color:#4ade80">verde = miglioramento</span>,
+          <span style="color:#ef4444">rosso = peggioramento</span>) per: nodi impattati,
+          max hop, worst RTO, worst RPO, costo totale, durata simulazione.
+          Sezione "Blast Radius Overlap": Common / Only in A / Only in B con conteggio e preview ID.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-new">frontend/src/components/SimulationComparison.jsx</span>
+          <span class="file-tag file-mod">frontend/src/App.jsx</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">🔄</span> Fix HMR su Windows + Docker</div>
+        <div class="feature-desc">
+          Vite non riceveva eventi filesystem inotify dal volume Docker su Windows.
+          Aggiunta configurazione polling: <code>watch: &#123; usePolling: true, interval: 1000 &#125;</code>
+          in <code>vite.config.js</code>. Hot Module Replacement ora funzionante senza restart manuale.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-config">frontend/vite.config.js</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="feature">
+        <div class="feature-title"><span class="feature-icon">€</span> Conversione costi USD → EUR (tasso 0.92)</div>
+        <div class="feature-desc">
+          Costante <code>_USD_TO_EUR = 0.92</code> in <code>cost_estimator.py</code>.
+          Tutte le funzioni <code>estimate_hourly_cost()</code> e <code>estimate_recovery_cost()</code>
+          restituiscono ora valori in EUR. Il costo operativo fisso è €46 (era $50).
+          Frontend aggiornato: simbolo <code>€</code> in SimulationReport e SimulationComparison.
+          CSV export aggiornato con header "Recovery Cost (EUR)".
+          Documentazione HTML (<code>docs/recovery-cost-model.html</code>) completamente aggiornata.
+        </div>
+        <div class="file-list">
+          <span class="file-tag file-mod">backend/algorithms/cost_estimator.py</span>
+          <span class="file-tag file-mod">frontend/src/components/SimulationReport.jsx</span>
+          <span class="file-tag file-mod">frontend/src/components/SimulationComparison.jsx</span>
+          <span class="file-tag file-new">docs/recovery-cost-model.html</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ SUMMARY TABLE ═══════════ -->
+  <div class="summary">
+    <div class="summary-header">Riepilogo file modificati / creati</div>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Stato</th>
+          <th>Priority</th>
+          <th>Descrizione</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">backend/models/errors.py</td><td class="tag-new">NEW</td><td>P1 QW2</td><td>Modello ErrorResponse unificato</td></tr>
+        <tr><td class="mono">backend/db/simulation_cache.py</td><td class="tag-new">NEW</td><td>P1.1</td><td>Redis + memory cache astratta</td></tr>
+        <tr><td class="mono">backend/api/dependencies.py</td><td class="tag-new">NEW</td><td>P1.2/1.3</td><td>Rate limiter + API key dependency</td></tr>
+        <tr><td class="mono">backend/algorithms/cost_estimator.py</td><td class="tag-new">NEW</td><td>P3 #9</td><td>Stima costi recovery in EUR</td></tr>
+        <tr><td class="mono">backend/algorithms/region_latency.py</td><td class="tag-new">NEW</td><td>P3 #8</td><td>Matrice RTT inter-regione AWS</td></tr>
+        <tr><td class="mono">backend/algorithms/playbook_generator.py</td><td class="tag-new">NEW</td><td>P3 #10</td><td>LLM playbook con RAG Qdrant</td></tr>
+        <tr><td class="mono">backend/observability.py</td><td class="tag-new">NEW</td><td>P4 #11/#12</td><td>OTel tracing + Prometheus metrics</td></tr>
+        <tr><td class="mono">frontend/src/components/PlaybookPanel.jsx</td><td class="tag-new">NEW</td><td>P3 #10</td><td>UI step recovery AI</td></tr>
+        <tr><td class="mono">frontend/src/components/SimulationComparison.jsx</td><td class="tag-new">NEW</td><td>P5 #15</td><td>Modale confronto simulazioni</td></tr>
+        <tr><td class="mono">frontend/src/hooks/useTheme.js</td><td class="tag-new">NEW</td><td>P5 #13</td><td>Hook dark/light mode</td></tr>
+        <tr><td class="mono">config/grafana/provisioning/…</td><td class="tag-new">NEW</td><td>P4 #12</td><td>Datasource + dashboard ATHENA</td></tr>
+        <tr><td class="mono">docs/recovery-cost-model.html</td><td class="tag-new">NEW</td><td>P5 extra</td><td>Documentazione formula costi EUR</td></tr>
+        <tr><td class="mono">backend/db/neo4j_client.py</td><td class="tag-mod">MOD</td><td>P1 QW1 + P4</td><td>Indici + OTel span per query</td></tr>
+        <tr><td class="mono">backend/parsers/docs.py</td><td class="tag-mod">MOD</td><td>P1 QW4</td><td>Cache embedding + client singleton</td></tr>
+        <tr><td class="mono">backend/main.py</td><td class="tag-mod">MOD</td><td>P1 QW2 + P4</td><td>Global handler + OTel setup</td></tr>
+        <tr><td class="mono">backend/settings.py</td><td class="tag-mod">MOD</td><td>P1.1 + P4</td><td>redis_url, otel_endpoint, ollama_model</td></tr>
+        <tr><td class="mono">backend/requirements.txt</td><td class="tag-mod">MOD</td><td>P1.1 + P1.3 + P4</td><td>redis, slowapi, opentelemetry packages</td></tr>
+        <tr><td class="mono">backend/api/dr.py</td><td class="tag-mod">MOD</td><td>P1.2 + P3 + P4</td><td>Error handling, playbook, metrics</td></tr>
+        <tr><td class="mono">backend/api/compliance.py</td><td class="tag-mod">MOD</td><td>P1.2</td><td>Try/except strutturato</td></tr>
+        <tr><td class="mono">backend/api/graph.py</td><td class="tag-mod">MOD</td><td>P1.2</td><td>Try/except strutturato</td></tr>
+        <tr><td class="mono">backend/api/metrics.py</td><td class="tag-mod">MOD</td><td>P1.2 + P3 #7</td><td>Error handling + metrics range</td></tr>
+        <tr><td class="mono">backend/api/whatif.py</td><td class="tag-mod">MOD</td><td>P1.2</td><td>Try/except strutturato</td></tr>
+        <tr><td class="mono">backend/api/postmortem.py</td><td class="tag-mod">MOD</td><td>P1.2</td><td>Try/except strutturato</td></tr>
+        <tr><td class="mono">backend/mcp_server/app.py</td><td class="tag-mod">MOD</td><td>P1.1</td><td>Usa SimulationCache factory</td></tr>
+        <tr><td class="mono">backend/models/enhanced_graph.py</td><td class="tag-mod">MOD</td><td>P3 #9</td><td>Campi costo nei modelli nodo</td></tr>
+        <tr><td class="mono">backend/models/features.py</td><td class="tag-mod">MOD</td><td>P3 #10</td><td>RecoveryPlaybook, PlaybookStep</td></tr>
+        <tr><td class="mono">backend/algorithms/cascading_failure.py</td><td class="tag-mod">MOD</td><td>P3 #8/#9</td><td>Latenza geo + annotazione costi</td></tr>
+        <tr><td class="mono">frontend/src/App.jsx</td><td class="tag-mod">MOD</td><td>P1 QW3 + P5</td><td>useCallback + dark mode + compare UI</td></tr>
+        <tr><td class="mono">frontend/src/api/client.js</td><td class="tag-mod">MOD</td><td>P1.2 + P3</td><td>Axios interceptor + generatePlaybook</td></tr>
+        <tr><td class="mono">frontend/src/index.css</td><td class="tag-mod">MOD</td><td>P5 #13</td><td>CSS variables dark/light theme</td></tr>
+        <tr><td class="mono">frontend/tailwind.config.js</td><td class="tag-mod">MOD</td><td>P5 #13</td><td>Colori via CSS variables</td></tr>
+        <tr><td class="mono">frontend/src/components/SimulationReport.jsx</td><td class="tag-mod">MOD</td><td>P1 QW3 + P3 + P5</td><td>memo + playbook + export + €</td></tr>
+        <tr><td class="mono">frontend/src/components/SimulationComparison.jsx</td><td class="tag-mod">MOD</td><td>P5 extra</td><td>Unità € nella comparison</td></tr>
+        <tr><td class="mono">frontend/src/components/InfrastructureMap.jsx</td><td class="tag-mod">MOD</td><td>P1 QW3</td><td>React.memo</td></tr>
+        <tr><td class="mono">frontend/src/components/MetricsDashboard.jsx</td><td class="tag-mod">MOD</td><td>P1 QW3</td><td>React.memo + sub-componenti memo</td></tr>
+        <tr><td class="mono">frontend/src/components/TopologyViewer.jsx</td><td class="tag-mod">MOD</td><td>P1 QW3</td><td>React.memo + fix import memo</td></tr>
+        <tr><td class="mono">frontend/src/components/SimulationTimeline.jsx</td><td class="tag-mod">MOD</td><td>P1 QW3</td><td>useMemo + formatTime puro</td></tr>
+        <tr><td class="mono">frontend/vite.config.js</td><td class="tag-cfg">CFG</td><td>P5 fix</td><td>HMR polling Windows+Docker</td></tr>
+        <tr><td class="mono">docker-compose.yml</td><td class="tag-cfg">CFG</td><td>P1.1 + P4</td><td>Redis + Jaeger + Grafana services</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>ATHENA — Predictive Resilience Engine &nbsp;·&nbsp; branch 01_01_03</span>
+    <span>Generato il 17 Maggio 2026</span>
+  </div>
+
+</div>
+</body>
+</html>
