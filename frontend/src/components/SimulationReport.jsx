@@ -23,7 +23,7 @@ function exportJSON(simulationResult) {
 }
 
 function exportCSV(simulationResult) {
-  const header = ['Hop', 'Node ID', 'Name', 'Type', 'RTO (min)', 'RPO (min)', 'Recovery Cost (USD)']
+  const header = ['Hop', 'Node ID', 'Name', 'Type', 'RTO (min)', 'RPO (min)', 'Recovery Cost (EUR)']
   const rows = (simulationResult.blast_radius || [])
     .sort((a, b) => a.distance - b.distance)
     .map(n => [
@@ -167,7 +167,7 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] } })
           <span>{blastRadius.length} nodes affected</span>
           {simulationResult.total_recovery_cost_usd != null && (
             <span className="text-yellow-400 font-mono">
-              ~${simulationResult.total_recovery_cost_usd.toLocaleString()} recovery cost
+              ~€{simulationResult.total_recovery_cost_usd.toLocaleString()} recovery cost
             </span>
           )}
           <button
@@ -244,7 +244,7 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] } })
                       </td>
                       {node.recovery_cost_usd != null && (
                         <td className="text-right px-2 py-1 font-mono text-yellow-400">
-                          ${node.recovery_cost_usd}
+                          €{node.recovery_cost_usd}
                         </td>
                       )}
                     </tr>

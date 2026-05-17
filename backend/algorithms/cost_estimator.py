@@ -1,9 +1,13 @@
 """
 Cost estimation for infrastructure nodes and recovery strategies.
 Provides per-hour and recovery cost estimates based on node type + region.
+All costs are returned in EUR (converted from AWS USD on-demand pricing).
 """
 
 from typing import Optional
+
+# EUR/USD conversion rate (approximate market rate)
+_USD_TO_EUR: float = 0.92
 
 # Hourly cost (USD) per resource type — P50 estimates for us-east-1
 # Values based on publicly available AWS on-demand pricing
@@ -48,10 +52,10 @@ _STRATEGY_RECOVERY_MULTIPLIER: dict[str, float] = {
 
 
 def estimate_hourly_cost(node_type: str, region: Optional[str] = None) -> float:
-    """Estimate hourly cost in USD for a node given type and region."""
+    """Estimate hourly cost in EUR for a node given type and region."""
     base = _BASE_HOURLY_COST_USD.get(node_type, _BASE_HOURLY_COST_USD["generic"])
     multiplier = _REGION_MULTIPLIER.get(region or "us-east-1", 1.0)
-    return round(base * multiplier, 4)
+    return round(base * multiplier * _USD_TO_EUR, 4)
 
 
 def estimate_recovery_cost(
@@ -61,16 +65,17 @@ def estimate_recovery_cost(
     rto_minutes: Optional[int],
 ) -> float:
     """
-    Estimate total cost (USD) of a recovery event.
+    Estimate total cost (EUR) of a recovery event.
 
     Formula:
         recovery_cost = hourly_cost × (rto_minutes / 60) × strategy_multiplier + base_ops_cost
+    All values are in EUR (converted from AWS USD pricing via _USD_TO_EUR rate).
     """
     hourly = estimate_hourly_cost(node_type, region)
     rto_hours = (rto_minutes or 60) / 60
     strategy = recovery_strategy or "generic"
     multiplier = _STRATEGY_RECOVERY_MULTIPLIER.get(strategy, 2.5)
-    ops_cost = 50.0  # flat ops/engineer cost per incident (USD)
+    ops_cost = round(50.0 * _USD_TO_EUR, 2)  # flat ops/engineer cost per incident
 
     return round(hourly * rto_hours * multiplier + ops_cost, 2)
 

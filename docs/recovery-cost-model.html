@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ATHENA — Recovery Cost Model</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0a0e1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 48px 24px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #1f2937;
+    }
+
+    .header-icon { font-size: 2.5rem; }
+
+    .header-text h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #3b82f6;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-family: 'Courier New', monospace;
+    }
+
+    .header-text p {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    /* ── Formula box ── */
+    .formula-box {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-left: 4px solid #3b82f6;
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 36px;
+    }
+
+    .formula-box h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 14px;
+    }
+
+    .formula {
+      font-family: 'Courier New', monospace;
+      font-size: 1.05rem;
+      color: #f8fafc;
+      background: #0a0e1a;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 16px 20px;
+      line-height: 1.6;
+    }
+
+    .formula .var  { color: #38bdf8; }
+    .formula .op   { color: #94a3b8; }
+    .formula .const { color: #fb923c; }
+
+    /* ── Section ── */
+    .section {
+      margin-bottom: 32px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .section-number {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #1e40af;
+      color: #bfdbfe;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-family: 'Courier New', monospace;
+    }
+
+    .section-title h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    /* ── Tables ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+
+    thead tr {
+      border-bottom: 1px solid #1f2937;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 8px 12px;
+      color: #475569;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #0f172a;
+      transition: background 0.15s;
+    }
+
+    tbody tr:hover { background: #111827; }
+
+    tbody td {
+      padding: 9px 12px;
+      color: #cbd5e1;
+    }
+
+    .mono { font-family: 'Courier New', monospace; }
+
+    .cost-value  { color: #34d399; font-weight: 600; }
+    .mult-value  { color: #fb923c; font-weight: 600; }
+    .tag         { font-size: 0.72rem; color: #475569; font-style: italic; }
+
+    /* ── Multiplier badges ── */
+    .mult-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .mult-low    { background: #064e3b; color: #6ee7b7; }
+    .mult-mid    { background: #1e3a5f; color: #93c5fd; }
+    .mult-high   { background: #422006; color: #fdba74; }
+    .mult-danger { background: #450a0a; color: #fca5a5; }
+
+    /* ── Example box ── */
+    .example-box {
+      background: #0d1b2a;
+      border: 1px solid #1e3a5f;
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 32px;
+    }
+
+    .example-box h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #3b82f6;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
+    }
+
+    .example-box .context {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 16px;
+    }
+
+    .example-box .context strong { color: #e2e8f0; }
+
+    .calc-steps {
+      font-family: 'Courier New', monospace;
+      font-size: 0.875rem;
+      line-height: 2;
+      color: #cbd5e1;
+      background: #0a0e1a;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 16px 20px;
+    }
+
+    .calc-steps .label { color: #64748b; }
+    .calc-steps .result { color: #34d399; font-weight: 700; }
+    .calc-steps .highlight { color: #38bdf8; }
+
+    /* ── Note ── */
+    .note {
+      display: flex;
+      gap: 12px;
+      background: #1c1400;
+      border: 1px solid #451a03;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 0.83rem;
+      color: #fcd34d;
+      line-height: 1.6;
+    }
+
+    .note-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+
+    .note a { color: #60a5fa; text-decoration: none; }
+    .note a:hover { text-decoration: underline; }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 1px solid #1f2937;
+      font-size: 0.75rem;
+      color: #334155;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">🔮</div>
+    <div class="header-text">
+      <h1>ATHENA — Recovery Cost Model</h1>
+      <p>Modello algoritmico per la stima del costo di recovery nei disaster simulation &mdash; valori in <strong style="color:#34d399">EUR</strong> (conversione da AWS USD pricing, tasso 1 USD = 0.92 EUR)</p>
+    </div>
+  </div>
+
+  <!-- Formula -->
+  <div class="formula-box">
+    <h2>Formula principale</h2>
+    <div class="formula">
+      <span class="var">recovery_cost</span>
+      <span class="op"> = </span>
+      <span class="var">hourly_cost</span>
+      <span class="op"> × (</span><span class="var">rto_minutes</span><span class="op"> / 60) × </span>
+      <span class="var">strategy_multiplier</span>
+      <span class="op"> + </span>
+      <span class="const">€46</span>
+      <span class="op"> ops_cost</span>
+    </div>
+  </div>
+
+  <!-- 1. Hourly cost -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-number">1</div>
+      <h3>Costo orario per tipo di risorsa <span class="tag">(baseline us-east-1, AWS on-demand P50)</span></h3>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo risorsa</th>
+          <th>Costo/ora (EUR)</th>
+          <th>Riferimento</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">aws_rds_cluster</td>
+          <td class="cost-value mono">€0.267</td>
+          <td class="tag">Aurora db.r6g.large</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_db_instance</td>
+          <td class="cost-value mono">€0.156</td>
+          <td class="tag">RDS db.t3.medium</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_elasticache_cluster</td>
+          <td class="cost-value mono">€0.063</td>
+          <td class="tag">ElastiCache cache.t3.medium</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_instance</td>
+          <td class="cost-value mono">€0.042</td>
+          <td class="tag">EC2 t3.medium</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_eks_cluster</td>
+          <td class="cost-value mono">€0.092</td>
+          <td class="tag">Cluster fee + managed nodegroup</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_lb</td>
+          <td class="cost-value mono">€0.007</td>
+          <td class="tag">ALB + LCU</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_s3_bucket</td>
+          <td class="cost-value mono">€0.021</td>
+          <td class="tag">~100 GB bucket (per ora)</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_sqs_queue</td>
+          <td class="cost-value mono">€0.0004</td>
+          <td class="tag">Per 1M request (approssimato/h)</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_lambda_function</td>
+          <td class="cost-value mono">€0.0002</td>
+          <td class="tag">Per-invocation (approssimato)</td>
+        </tr>
+        <tr>
+          <td class="mono">aws_cloudfront</td>
+          <td class="cost-value mono">€0.008</td>
+          <td class="tag">Per GB transfer</td>
+        </tr>
+        <tr>
+          <td class="mono">generic</td>
+          <td class="cost-value mono">€0.046</td>
+          <td class="tag">Fallback per tipi non mappati</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. Region multiplier -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-number">2</div>
+      <h3>Moltiplicatore regionale <span class="tag">(relativo a us-east-1 = 1.00)</span></h3>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Regione</th>
+          <th>Città</th>
+          <th>Moltiplicatore</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">us-east-1</td>
+          <td>Virginia (N.)</td>
+          <td><span class="mult-badge mult-low">×1.00</span></td>
+        </tr>
+        <tr>
+          <td class="mono">us-east-2</td>
+          <td>Ohio</td>
+          <td><span class="mult-badge mult-low">×1.00</span></td>
+        </tr>
+        <tr>
+          <td class="mono">us-west-2</td>
+          <td>Oregon</td>
+          <td><span class="mult-badge mult-low">×1.03</span></td>
+        </tr>
+        <tr>
+          <td class="mono">us-west-1</td>
+          <td>California (N.)</td>
+          <td><span class="mult-badge mult-mid">×1.10</span></td>
+        </tr>
+        <tr>
+          <td class="mono">eu-west-1</td>
+          <td>Irlanda</td>
+          <td><span class="mult-badge mult-mid">×1.15</span></td>
+        </tr>
+        <tr>
+          <td class="mono">ap-south-1</td>
+          <td>Mumbai</td>
+          <td><span class="mult-badge mult-mid">×1.15</span></td>
+        </tr>
+        <tr>
+          <td class="mono">eu-west-2</td>
+          <td>Londra</td>
+          <td><span class="mult-badge mult-mid">×1.18</span></td>
+        </tr>
+        <tr>
+          <td class="mono">eu-central-1</td>
+          <td>Francoforte</td>
+          <td><span class="mult-badge mult-mid">×1.20</span></td>
+        </tr>
+        <tr>
+          <td class="mono">ap-southeast-1</td>
+          <td>Singapore</td>
+          <td><span class="mult-badge mult-high">×1.25</span></td>
+        </tr>
+        <tr>
+          <td class="mono">ap-northeast-1</td>
+          <td>Tokyo</td>
+          <td><span class="mult-badge mult-high">×1.30</span></td>
+        </tr>
+        <tr>
+          <td class="mono">sa-east-1</td>
+          <td>San Paolo</td>
+          <td><span class="mult-badge mult-danger">×1.40</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. Strategy multiplier -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-number">3</div>
+      <h3>Moltiplicatore strategia di recovery</h3>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Strategia</th>
+          <th>Moltiplicatore</th>
+          <th>Motivazione</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">stateless</td>
+          <td><span class="mult-badge mult-low">×1.1</span></td>
+          <td class="tag">Spin up replacement, nessuno stato da ripristinare</td>
+        </tr>
+        <tr>
+          <td class="mono">multi_az</td>
+          <td><span class="mult-badge mult-low">×1.2</span></td>
+          <td class="tag">Failover automatico, quasi nessun costo extra</td>
+        </tr>
+        <tr>
+          <td class="mono">replica_fallback</td>
+          <td><span class="mult-badge mult-mid">×1.5</span></td>
+          <td class="tag">Promozione replica, breve downtime manuale</td>
+        </tr>
+        <tr>
+          <td class="mono">generic</td>
+          <td><span class="mult-badge mult-high">×2.5</span></td>
+          <td class="tag">Recovery manuale, procedure non standardizzate</td>
+        </tr>
+        <tr>
+          <td class="mono">backup_fallback</td>
+          <td><span class="mult-badge mult-danger">×4.0</span></td>
+          <td class="tag">Restore da backup, ore di lavoro extra, istanze temporanee</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 4. Ops cost -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-number">4</div>
+      <h3>Costo fisso operativo</h3>
+    </div>
+    <p style="font-size:0.87rem; color:#94a3b8; line-height:1.7; padding-left: 36px;">
+      Viene aggiunto un costo fisso di <strong style="color:#fb923c; font-family:'Courier New',monospace;">€46.00</strong>
+      per ogni nodo impattato, a copertura forfettaria delle ore ingegnere / on-call
+      necessarie per gestire l'incident, indipendentemente dal tipo di risorsa o dalla durata dell'RTO.
+    </p>
+  </div>
+
+  <!-- Example -->
+  <div class="example-box">
+    <h2>Esempio concreto</h2>
+    <p class="context">
+      Nodo: <strong>aws_rds_cluster</strong> &nbsp;|&nbsp;
+      Regione: <strong>eu-central-1</strong> &nbsp;|&nbsp;
+      RTO: <strong>30 min</strong> &nbsp;|&nbsp;
+      Strategia: <strong>replica_fallback</strong>
+    </p>
+    <div class="calc-steps">
+<span class="label">hourly_cost   </span> = €0.267 × 1.20                   = <span class="highlight">€0.320 / h</span>
+<span class="label">recovery_cost </span> = €0.320 × (30 / 60) × 1.5 + €46
+              = €0.320 × 0.5 × 1.5 + €46
+              = €0.240 + €46
+              = <span class="result">€46.24</span>
+    </div>
+  </div>
+
+  <!-- Note -->
+  <div class="note">
+    <div class="note-icon">⚠️</div>
+    <div>
+      I valori di costo base sono <strong>stime P50 da AWS on-demand pricing pubblico</strong> e non rappresentano dati real-time.
+      Per un ambiente di produzione si consiglia di integrare con
+      <a href="https://aws.amazon.com/aws-cost-management/aws-cost-explorer/" target="_blank">AWS Cost Explorer</a>
+      o <a href="https://www.infracost.io/" target="_blank">Infracost</a> per ottenere valori precisi e aggiornati.
+      Il costo fisso operativo (€46) è una stima interna e dovrebbe essere calibrata in base al costo reale del team on-call.
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>ATHENA — Predictive Resilience Engine</span>
+    <span>backend/algorithms/cost_estimator.py</span>
+  </div>
+
+</div>
+</body>
+</html>

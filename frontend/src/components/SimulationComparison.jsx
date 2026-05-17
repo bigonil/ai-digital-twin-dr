@@ -112,7 +112,7 @@ function SimulationComparison({ simA, simB, labelA = 'Sim A', labelB = 'Sim B', 
                   label="Total recovery cost"
                   valA={costA != null ? Math.round(costA) : null}
                   valB={costB != null ? Math.round(costB) : null}
-                  unit=" $"
+                  unit=" €"
                   lowerIsBetter={true}
                 />
                 <CompareRow
