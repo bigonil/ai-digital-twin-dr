@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart DR Simulator — Matrice di Eisenhower</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg:#0d0f14; --bg2:#13161e; --bg3:#1a1e2a;
+    --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.14);
+    --text:#e2e4ec; --text2:#8b90a4; --text3:#555b72;
+    --q1:#ef4444; --q1-dim:rgba(239,68,68,0.12); --q1-b:rgba(239,68,68,0.35);
+    --q2:#f59e0b; --q2-dim:rgba(245,158,11,0.10); --q2-b:rgba(245,158,11,0.30);
+    --q3:#3b82f6; --q3-dim:rgba(59,130,246,0.10); --q3-b:rgba(59,130,246,0.30);
+    --q4:#6b7280; --q4-dim:rgba(107,114,128,0.10); --q4-b:rgba(107,114,128,0.28);
+    --green:#10b981; --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.65;min-height:100vh}
+  header{border-bottom:1px solid var(--border);padding:36px 56px 28px;display:flex;align-items:flex-start;justify-content:space-between;gap:32px}
+  .hdr-left{flex:1}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:10px}
+  h1{font-weight:600;font-size:28px;line-height:1.25;letter-spacing:-.02em;margin-bottom:10px}
+  h1 span{color:var(--text2);font-weight:300}
+  .subtitle{color:var(--text2);font-size:14px;max-width:560px}
+  .meta-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+  .pill{font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:4px 10px;border-radius:4px;border:1px solid var(--border2);color:var(--text2);background:var(--bg3)}
+  .pill.g{border-color:rgba(16,185,129,.3);color:var(--green);background:rgba(16,185,129,.08)}
+  .pill.b{border-color:rgba(59,130,246,.3);color:#60a5fa;background:rgba(59,130,246,.08)}
+  .hdr-right{text-align:right;font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.9;white-space:nowrap;padding-top:4px}
+  main{padding:40px 56px 64px;max-width:1400px}
+  .sl{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--text3);text-transform:uppercase;margin-bottom:20px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  hr.sep{border:none;border-top:1px solid var(--border);margin:48px 0}
+
+  /* MATRIX */
+  .lrow{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:3px}
+  .lcell{text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--text3);text-transform:uppercase;padding:4px 0}
+  .mc{position:relative;margin-bottom:56px}
+  .axl,.ayl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--text3);text-transform:uppercase;position:absolute}
+  .axl{bottom:-26px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px}
+  .axl::before{content:'←';font-size:10px} .axl::after{content:'→';font-size:10px}
+  .ayl{left:-42px;top:50%;transform:translateY(-50%) rotate(-90deg);display:flex;align-items:center;gap:8px}
+  .ayl::before{content:'↑';font-size:10px} .ayl::after{content:'↓';font-size:10px}
+  .mg{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;background:var(--border);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .q{background:var(--bg2);padding:24px;min-height:260px;position:relative;transition:background .2s}
+  .q:hover{background:var(--bg3)}
+  .qb{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;border-radius:3px;margin-bottom:12px;display:inline-block}
+  .qn{font-family:var(--mono);font-size:11px;color:var(--text3);position:absolute;top:14px;right:18px}
+  .qt{font-weight:600;font-size:15px;margin-bottom:6px;line-height:1.3}
+  .qd{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--text3);margin-bottom:14px;text-transform:uppercase}
+  .qi{list-style:none;display:flex;flex-direction:column;gap:6px}
+  .qi li{font-size:12px;color:var(--text2);padding-left:14px;position:relative;line-height:1.4}
+  .qi li::before{content:'›';position:absolute;left:0;top:0;font-size:14px;line-height:1;margin-top:1px}
+  .qa{position:absolute;bottom:12px;left:24px;right:24px;background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:8px 12px;font-family:var(--mono);font-size:10px;color:var(--text2);display:flex;align-items:center;gap:8px}
+  .q1c{border-top:2px solid var(--q1)}
+  .q1c .qb{background:var(--q1-dim);color:var(--q1);border:1px solid var(--q1-b)}
+  .q1c .qt{color:var(--q1)} .q1c .qi li::before{color:var(--q1)} .q1c .qa{border-color:var(--q1-b)}
+  .q2c{border-top:2px solid var(--q2)}
+  .q2c .qb{background:var(--q2-dim);color:var(--q2);border:1px solid var(--q2-b)}
+  .q2c .qt{color:var(--q2)} .q2c .qi li::before{color:var(--q2)} .q2c .qa{border-color:var(--q2-b)}
+  .q3c{border-top:2px solid var(--q3)}
+  .q3c .qb{background:var(--q3-dim);color:var(--q3);border:1px solid var(--q3-b)}
+  .q3c .qt{color:var(--q3)} .q3c .qi li::before{color:var(--q3)} .q3c .qa{border-color:var(--q3-b)}
+  .q4c{border-top:2px solid var(--q4)}
+  .q4c .qb{background:var(--q4-dim);color:var(--q4);border:1px solid var(--q4-b)}
+  .q4c .qt{color:var(--q4)} .q4c .qi li::before{color:var(--q4)} .q4c .qa{border-color:var(--q4-b)}
+  code{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px}
+
+  /* BUBBLE CHART */
+  .bc-wrap{background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:10px 6px 6px;margin-bottom:48px;overflow:hidden}
+  .bg{cursor:pointer}
+  .bg circle{transition:opacity .14s}
+  .bg:hover circle{opacity:.8}
+  .bg:hover .bl{opacity:1}
+  .bl{opacity:.65;transition:opacity .14s;font-family:'IBM Plex Mono',monospace}
+  .qzl{font-family:'IBM Plex Mono',monospace;pointer-events:none}
+  .axt{font-family:'IBM Plex Mono',monospace}
+
+  /* TOOLTIP */
+  #btip{position:fixed;pointer-events:none;display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--text);z-index:999;max-width:230px;line-height:1.65}
+  #btip .tq{font-size:9px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+  #btip .tn{font-weight:600;margin-bottom:3px}
+  #btip .tm{font-size:10px;color:var(--text2)}
+  #btip .tp{font-size:10px;color:var(--green);margin-top:3px}
+
+  /* TABLES */
+  .rs{margin-bottom:48px}
+  .rh{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+  .rd{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .rh h2{font-size:15px;font-weight:600}
+  .rh .rt{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.1em}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  thead th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);font-weight:500;padding:8px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+  tbody tr{border-bottom:1px solid var(--border)}
+  tbody tr:hover{background:var(--bg3)}
+  tbody td{padding:10px 14px;vertical-align:top;color:var(--text2);line-height:1.5}
+  tbody td:first-child{font-family:var(--mono);font-size:11px;color:var(--text);white-space:nowrap}
+  .bm{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;letter-spacing:.08em}
+  .must{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25)}
+  .sho{background:rgba(245,158,11,.10);color:#fbbf24;border:1px solid rgba(245,158,11,.25)}
+  .co{background:rgba(107,114,128,.12);color:#9ca3af;border:1px solid rgba(107,114,128,.25)}
+  .impl{background:rgba(16,185,129,.08);color:var(--green);border:1px solid rgba(16,185,129,.22)}
+  .new{background:rgba(59,130,246,.10);color:#60a5fa;border:1px solid rgba(59,130,246,.25)}
+
+  /* ARCH */
+  .ag{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:48px}
+  .ac{background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:20px}
+  .act{font-family:var(--mono);font-size:11px;color:var(--green);margin-bottom:6px;letter-spacing:.06em}
+  .acl{font-size:13px;font-weight:500;margin-bottom:10px}
+  .ac p{font-size:12px;color:var(--text2);line-height:1.55}
+
+  /* ALGO */
+  .ab{background:var(--bg2);border:1px solid var(--border2);border-radius:6px;margin-bottom:48px;overflow:hidden}
+  .ah{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--text2)}
+  .ah .dot{width:8px;height:8px;border-radius:50%}
+  pre{margin:0;padding:20px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text);overflow-x:auto}
+  .kw{color:#c792ea} .fn{color:#82aaff} .str{color:#c3e88d}
+  .cm{color:var(--text3);font-style:italic} .nu{color:#f78c6c} .op{color:#89ddff} .de{color:#ffcb6b}
+
+  /* NFR */
+  .ng{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:48px}
+  .nc{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:18px 20px}
+  .ni{font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px;letter-spacing:.1em}
+  .nn{font-weight:500;font-size:13px;margin-bottom:8px}
+  .nd{font-size:12px;color:var(--text2);line-height:1.5}
+  .nv{margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--green);background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.15);border-radius:4px;padding:5px 10px;display:inline-block}
+  footer{border-top:1px solid var(--border);padding:24px 56px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--text3)}
+</style>
+</head>
+<body>
+<div id="btip"><div class="tq" id="tq"></div><div class="tn" id="tn"></div><div class="tm" id="tm"></div><div class="tp" id="tp"></div></div>
+
+<header>
+  <div class="hdr-left">
+    <div class="eyebrow">Smart DR Simulator · Requirement Specification v2.0</div>
+    <h1>Matrice di Eisenhower <span>per la Prioritizzazione</span><br>degli Eventi di Disaster Recovery</h1>
+    <p class="subtitle">Framework decisionale applicato all'AI Digital Twin DR Platform — cascading failure BFS su Neo4j, calcolo RTO/RPO per recovery strategy, generazione playbook via MCP Server e raccomandazioni architetturali dal SimulationReport.</p>
+    <div class="meta-pills">
+      <span class="pill g">REQ-2026_1B17</span>
+      <span class="pill">Azure Digital Twins</span>
+      <span class="pill b">FastAPI · Python 3.12</span>
+      <span class="pill b">Neo4j 5.18</span>
+      <span class="pill b">VictoriaMetrics</span>
+      <span class="pill b">Qdrant · Ollama</span>
+      <span class="pill b">MCP Server</span>
+    </div>
+  </div>
+  <div class="hdr-right">Versione 2.0<br>Smart DR Project<br>HERA S.p.A. — DSI<br>Deadline: 31/12/2026<br><br>Stato: DRAFT</div>
+</header>
+
+<main>
+
+<!-- ══ 01: MATRIX ══ -->
+<div class="sl">01 — Matrice di Eisenhower applicata al DR Simulator</div>
+<div class="lrow"><div class="lcell">⚡ Urgente</div><div class="lcell">◌ Non Urgente</div></div>
+<div class="mc">
+  <div class="mg">
+
+    <div class="q q1c">
+      <span class="qn">Q1</span>
+      <div class="qb">Urgente · Importante</div>
+      <div class="qt">ESEGUI ORA</div>
+      <div class="qd">→ MCP get_recovery_plan immediato</div>
+      <ul class="qi">
+        <li>Blast radius attivo — cascading failure in propagazione (BFS su Neo4j)</li>
+        <li>RTO breach confermato da <code>rto_rpo_calculator.py</code> su nodo critico</li>
+        <li>Failover del database primario non completato entro SLA contrattuale</li>
+        <li>Applicazione critica irraggiungibile — processi batch bloccati</li>
+        <li>Drift infrastruttura critico rilevato da MCP <code>check_drift</code></li>
+        <li>Perdita connettività ExpressRoute — propagazione su grafo Neo4j attiva</li>
+      </ul>
+      <div class="qa"><span>🔴</span><span>BFS cascade → MCP get_recovery_plan → PagerDuty escalation</span></div>
+    </div>
+
+    <div class="q q2c">
+      <span class="qn">Q2</span>
+      <div class="qb">Non Urgente · Importante</div>
+      <div class="qt">PIANIFICA E MIGLIORA</div>
+      <div class="qd">→ simulate_disaster dry-run + arch recommendations</div>
+      <ul class="qi">
+        <li>Simulazione DR periodica tramite MCP <code>simulate_disaster</code> (dry-run, non-prod)</li>
+        <li>SimulationReport a 5 sezioni con arch recommendations post-sim</li>
+        <li>Aggiornamento schema Neo4j basato su learnings da simulazioni</li>
+        <li>Pacchetto ARB-ready via <code>export_scenarios_to_word.py</code> per High Impact recs</li>
+        <li>Analisi trend RTO/RPO su VictoriaMetrics sliding window (90 giorni)</li>
+        <li>Design chaos engineering via <code>/api/chaos</code> per scenari worst-case</li>
+      </ul>
+      <div class="qa"><span>🟡</span><span>Scheduler → simulate_disaster → SimulationReport → ARB queue</span></div>
+    </div>
+
+    <div class="q q3c">
+      <span class="qn">Q3</span>
+      <div class="qb">Urgente · Non Importante</div>
+      <div class="qt">DELEGA ALL'AUTOMAZIONE</div>
+      <div class="qd">→ Static playbook steps, no escalation umana</div>
+      <ul class="qi">
+        <li>Performance warning entro SLA — VictoriaMetrics MetricsQL (warning level)</li>
+        <li>Replica lag su nodo secondario — auto-sync (<code>replica_fallback</code> strategy)</li>
+        <li>Health check failure su nodo non-critical path — nessun blast radius attivo</li>
+        <li>ServiceNow ticket P3/P4 auto-generato da static steps <code>playbook_generator.py</code></li>
+        <li>Escalation timer — promozione automatica a Q1 se condizione persiste oltre 15 min</li>
+      </ul>
+      <div class="qa"><span>🔵</span><span>VictoriaMetrics alert → static playbook → ServiceNow → no page</span></div>
+    </div>
+
+    <div class="q q4c">
+      <span class="qn">Q4</span>
+      <div class="qb">Non Urgente · Non Importante</div>
+      <div class="qt">ELIMINA O ARCHIVIA</div>
+      <div class="qd">→ LRU eviction, Neo4j cleanup, log retention</div>
+      <ul class="qi">
+        <li>SimulationCache LRU eviction — simulazioni scadute oltre retention (30 giorni)</li>
+        <li>Alert duplicati da monitoring legacy non integrato nel grafo Neo4j</li>
+        <li>Nodi orfani nel grafo — rilevati da MCP <code>check_drift</code> (nessun DEPENDS_ON)</li>
+        <li>Log di simulazione oltre retention period — purge da <code>simulation_cache.py</code></li>
+        <li>Definizioni di modello deprecate non referenziate da nessun nodo attivo</li>
+      </ul>
+      <div class="qa"><span>⚫</span><span>check_drift → Neo4j cleanup → SimulationCache purge → Audit log</span></div>
+    </div>
+
+  </div>
+  <div class="ayl">Importante — Non Importante</div>
+  <div class="axl">Urgente — Non Urgente</div>
+</div>
+<div style="height:32px"></div>
+
+<hr class="sep">
+
+<!-- ══ 01.B: BUBBLE CHART ══ -->
+<div class="sl">01.B — Rappresentazione grafica a bolle — posizionamento e magnitudine per quadrante</div>
+<p style="font-size:13px;color:var(--text2);margin-bottom:16px">Ogni bolla rappresenta un task del DR Simulator. La dimensione indica la magnitudine dell'impatto sul sistema (scala 1–10). Passare il cursore su una bolla per dettagli, mapping MCP tool e modulo Python di riferimento.</p>
+
+<div class="bc-wrap">
+<svg id="bsvg" width="100%" viewBox="0 0 860 430" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Quadrant fills -->
+  <rect x="40" y="22" width="388" height="183" fill="rgba(239,68,68,0.055)" rx="3"/>
+  <rect x="432" y="22" width="388" height="183" fill="rgba(245,158,11,0.045)" rx="3"/>
+  <rect x="40" y="209" width="388" height="175" fill="rgba(59,130,246,0.045)" rx="3"/>
+  <rect x="432" y="209" width="388" height="175" fill="rgba(107,114,128,0.032)" rx="3"/>
+
+  <!-- Axis dividers -->
+  <line x1="430" y1="18" x2="430" y2="390" stroke="rgba(255,255,255,0.10)" stroke-width="1" stroke-dasharray="5,4"/>
+  <line x1="36"  y1="207" x2="824" y2="207" stroke="rgba(255,255,255,0.10)" stroke-width="1" stroke-dasharray="5,4"/>
+
+  <!-- Quadrant zone labels -->
+  <text x="52"  y="40" class="qzl" font-size="9" fill="rgba(239,68,68,0.48)"  letter-spacing="0.12em">Q1 · URGENTE + IMPORTANTE</text>
+  <text x="444" y="40" class="qzl" font-size="9" fill="rgba(245,158,11,0.48)" letter-spacing="0.12em">Q2 · NON URGENTE + IMPORTANTE</text>
+  <text x="52"  y="225" class="qzl" font-size="9" fill="rgba(59,130,246,0.48)" letter-spacing="0.12em">Q3 · URGENTE + NON IMPORTANTE</text>
+  <text x="444" y="225" class="qzl" font-size="9" fill="rgba(107,114,128,0.48)" letter-spacing="0.12em">Q4 · NON URGENTE + NON IMPORTANTE</text>
+
+  <!-- Axis text -->
+  <text x="218" y="412" class="axt" font-size="10" fill="rgba(255,255,255,0.22)" text-anchor="middle" letter-spacing="0.12em">← URGENTE</text>
+  <text x="630" y="412" class="axt" font-size="10" fill="rgba(255,255,255,0.22)" text-anchor="middle" letter-spacing="0.12em">NON URGENTE →</text>
+  <text x="14" y="118" class="axt" font-size="9" fill="rgba(255,255,255,0.18)" text-anchor="middle" letter-spacing="0.1em" transform="rotate(-90,14,118)">IMPORTANTE</text>
+  <text x="14" y="298" class="axt" font-size="9" fill="rgba(255,255,255,0.18)" text-anchor="middle" letter-spacing="0.1em" transform="rotate(-90,14,298)">NON IMPORTANTE</text>
+
+  <!-- ── Q1 BUBBLES (red) ── -->
+  <g class="bg" data-q="Q1" data-name="Blast radius attivo" data-mag="10" data-mcp="get_recovery_plan" data-api="cascading_failure.py · bfs_with_latency()">
+    <circle cx="163" cy="88" r="30" fill="rgba(239,68,68,0.28)" stroke="#ef4444" stroke-width="1.2"/>
+    <text class="bl" x="163" y="85" font-size="9" fill="#fca5a5" text-anchor="middle" font-weight="500">blast radius</text>
+    <text class="bl" x="163" y="97" font-size="9" fill="#fca5a5" text-anchor="middle" font-weight="500">attivo</text>
+  </g>
+  <g class="bg" data-q="Q1" data-name="RTO breach confermato" data-mag="9" data-mcp="get_recovery_plan" data-api="rto_rpo_calculator.py · calculate_effective_rto()">
+    <circle cx="306" cy="65" r="27" fill="rgba(239,68,68,0.22)" stroke="#ef4444" stroke-width="1.2"/>
+    <text class="bl" x="306" y="62" font-size="9" fill="#fca5a5" text-anchor="middle" font-weight="500">RTO breach</text>
+    <text class="bl" x="306" y="74" font-size="9" fill="#fca5a5" text-anchor="middle" font-weight="500">confermato</text>
+  </g>
+  <g class="bg" data-q="Q1" data-name="DB failover non completato" data-mag="8" data-mcp="get_recovery_plan" data-api="playbook_generator.py · replica_fallback steps">
+    <circle cx="97"  cy="158" r="24" fill="rgba(239,68,68,0.18)" stroke="#ef4444" stroke-width="1"/>
+    <text class="bl" x="97"  y="155" font-size="9" fill="#fca5a5" text-anchor="middle">DB failover</text>
+    <text class="bl" x="97"  y="167" font-size="9" fill="#fca5a5" text-anchor="middle">fallito</text>
+  </g>
+  <g class="bg" data-q="Q1" data-name="App critica irraggiungibile" data-mag="7" data-mcp="simulate_disaster" data-api="api/dr.py · POST /api/dr/simulate">
+    <circle cx="366" cy="130" r="21" fill="rgba(239,68,68,0.16)" stroke="#ef4444" stroke-width="1"/>
+    <text class="bl" x="366" y="127" font-size="9" fill="#fca5a5" text-anchor="middle">app critica</text>
+    <text class="bl" x="366" y="139" font-size="9" fill="#fca5a5" text-anchor="middle">irraggiungibile</text>
+  </g>
+  <g class="bg" data-q="Q1" data-name="ExpressRoute connectivity loss" data-mag="6" data-mcp="check_drift" data-api="mcp_server/app.py · check_drift tool">
+    <circle cx="238" cy="168" r="19" fill="rgba(239,68,68,0.14)" stroke="#ef4444" stroke-width="1"/>
+    <text class="bl" x="238" y="165" font-size="9" fill="#fca5a5" text-anchor="middle">ExpressRoute</text>
+    <text class="bl" x="238" y="177" font-size="9" fill="#fca5a5" text-anchor="middle">down</text>
+  </g>
+
+  <!-- ── Q2 BUBBLES (amber) ── -->
+  <g class="bg" data-q="Q2" data-name="Simulazione DR periodica" data-mag="9" data-mcp="simulate_disaster" data-api="mcp_server/app.py · simulate_disaster(dry-run)">
+    <circle cx="551" cy="78" r="27" fill="rgba(245,158,11,0.22)" stroke="#f59e0b" stroke-width="1.2"/>
+    <text class="bl" x="551" y="75" font-size="9" fill="#fcd34d" text-anchor="middle" font-weight="500">simulazione DR</text>
+    <text class="bl" x="551" y="87" font-size="9" fill="#fcd34d" text-anchor="middle" font-weight="500">periodica</text>
+  </g>
+  <g class="bg" data-q="Q2" data-name="Architecture recommendations" data-mag="8" data-mcp="simulate_disaster" data-api="SimulationReport.jsx · sezione 5 Mitigation">
+    <circle cx="688" cy="100" r="24" fill="rgba(245,158,11,0.18)" stroke="#f59e0b" stroke-width="1"/>
+    <text class="bl" x="688" y="97"  font-size="9" fill="#fcd34d" text-anchor="middle">arch recs</text>
+    <text class="bl" x="688" y="109" font-size="9" fill="#fcd34d" text-anchor="middle">post-sim</text>
+  </g>
+  <g class="bg" data-q="Q2" data-name="ARB package generation" data-mag="7" data-mcp="—" data-api="export_scenarios_to_word.py">
+    <circle cx="795" cy="62" r="21" fill="rgba(245,158,11,0.16)" stroke="#f59e0b" stroke-width="1"/>
+    <text class="bl" x="795" y="59" font-size="9" fill="#fcd34d" text-anchor="middle">ARB package</text>
+    <text class="bl" x="795" y="71" font-size="9" fill="#fcd34d" text-anchor="middle">generation</text>
+  </g>
+  <g class="bg" data-q="Q2" data-name="Trend RTO/RPO analysis" data-mag="6" data-mcp="—" data-api="VictoriaMetrics MetricsQL · 90d window">
+    <circle cx="490" cy="158" r="19" fill="rgba(245,158,11,0.14)" stroke="#f59e0b" stroke-width="1"/>
+    <text class="bl" x="490" y="155" font-size="9" fill="#fcd34d" text-anchor="middle">trend</text>
+    <text class="bl" x="490" y="167" font-size="9" fill="#fcd34d" text-anchor="middle">RTO/RPO</text>
+  </g>
+  <g class="bg" data-q="Q2" data-name="Chaos engineering design" data-mag="5" data-mcp="simulate_disaster" data-api="api/chaos.py · POST /api/chaos">
+    <circle cx="757" cy="163" r="17" fill="rgba(245,158,11,0.12)" stroke="#f59e0b" stroke-width="1"/>
+    <text class="bl" x="757" y="160" font-size="9" fill="#fcd34d" text-anchor="middle">chaos eng.</text>
+    <text class="bl" x="757" y="172" font-size="9" fill="#fcd34d" text-anchor="middle">design</text>
+  </g>
+  <g class="bg" data-q="Q2" data-name="Playbook versioning &amp; review" data-mag="4" data-mcp="get_recovery_plan" data-api="playbook_generator.py · _playbook_cache">
+    <circle cx="614" cy="171" r="14" fill="rgba(245,158,11,0.10)" stroke="#f59e0b" stroke-width="0.8"/>
+    <text class="bl" x="614" y="174" font-size="9" fill="#fcd34d" text-anchor="middle">playbook vers.</text>
+  </g>
+
+  <!-- ── Q3 BUBBLES (blue) ── -->
+  <g class="bg" data-q="Q3" data-name="Auto-remediation playbook" data-mag="7" data-mcp="get_recovery_plan" data-api="playbook_generator.py · _STATIC_STEPS_BY_STRATEGY">
+    <circle cx="160" cy="252" r="21" fill="rgba(59,130,246,0.18)" stroke="#3b82f6" stroke-width="1"/>
+    <text class="bl" x="160" y="249" font-size="9" fill="#93c5fd" text-anchor="middle">auto-</text>
+    <text class="bl" x="160" y="261" font-size="9" fill="#93c5fd" text-anchor="middle">remediation</text>
+  </g>
+  <g class="bg" data-q="Q3" data-name="Performance warning (within SLA)" data-mag="6" data-mcp="—" data-api="VictoriaMetrics alert · warning threshold">
+    <circle cx="305" cy="237" r="19" fill="rgba(59,130,246,0.14)" stroke="#3b82f6" stroke-width="1"/>
+    <text class="bl" x="305" y="234" font-size="9" fill="#93c5fd" text-anchor="middle">performance</text>
+    <text class="bl" x="305" y="246" font-size="9" fill="#93c5fd" text-anchor="middle">warning</text>
+  </g>
+  <g class="bg" data-q="Q3" data-name="ServiceNow ticket auto-generation" data-mag="5" data-mcp="get_recovery_plan" data-api="ITSMConnector — da implementare">
+    <circle cx="97"  cy="328" r="17" fill="rgba(59,130,246,0.12)" stroke="#3b82f6" stroke-width="1"/>
+    <text class="bl" x="97"  y="325" font-size="9" fill="#93c5fd" text-anchor="middle">ServiceNow</text>
+    <text class="bl" x="97"  y="337" font-size="9" fill="#93c5fd" text-anchor="middle">ticket auto</text>
+  </g>
+  <g class="bg" data-q="Q3" data-name="Replica lag auto-sync" data-mag="4" data-mcp="—" data-api="rto_rpo_calculator.py · replica_fallback strategy">
+    <circle cx="273" cy="340" r="14" fill="rgba(59,130,246,0.10)" stroke="#3b82f6" stroke-width="0.8"/>
+    <text class="bl" x="273" y="337" font-size="9" fill="#93c5fd" text-anchor="middle">replica lag</text>
+    <text class="bl" x="273" y="349" font-size="9" fill="#93c5fd" text-anchor="middle">auto-sync</text>
+  </g>
+  <g class="bg" data-q="Q3" data-name="Non-critical health check failure" data-mag="3" data-mcp="—" data-api="api/metrics.py · GET /api/metrics/health/:id">
+    <circle cx="384" cy="308" r="12" fill="rgba(59,130,246,0.09)" stroke="#3b82f6" stroke-width="0.8"/>
+    <text class="bl" x="384" y="321" font-size="9" fill="#93c5fd" text-anchor="middle">health check</text>
+  </g>
+
+  <!-- ── Q4 BUBBLES (gray) ── -->
+  <g class="bg" data-q="Q4" data-name="SimulationCache LRU eviction" data-mag="5" data-mcp="—" data-api="db/simulation_cache.py · LRU eviction">
+    <circle cx="525" cy="258" r="17" fill="rgba(107,114,128,0.16)" stroke="#6b7280" stroke-width="1"/>
+    <text class="bl" x="525" y="255" font-size="9" fill="#d1d5db" text-anchor="middle">sim cache</text>
+    <text class="bl" x="525" y="267" font-size="9" fill="#d1d5db" text-anchor="middle">cleanup</text>
+  </g>
+  <g class="bg" data-q="Q4" data-name="Alert duplicati da monitoring legacy" data-mag="3" data-mcp="check_drift" data-api="mcp_server/app.py · check_drift">
+    <circle cx="675" cy="242" r="12" fill="rgba(107,114,128,0.12)" stroke="#6b7280" stroke-width="0.8"/>
+    <text class="bl" x="675" y="255" font-size="9" fill="#d1d5db" text-anchor="middle">alert duplicati</text>
+  </g>
+  <g class="bg" data-q="Q4" data-name="Log retention cleanup" data-mag="4" data-mcp="—" data-api="db/victoriametrics_client.py · retention policy">
+    <circle cx="760" cy="318" r="14" fill="rgba(107,114,128,0.13)" stroke="#6b7280" stroke-width="0.8"/>
+    <text class="bl" x="760" y="315" font-size="9" fill="#d1d5db" text-anchor="middle">log retention</text>
+    <text class="bl" x="760" y="327" font-size="9" fill="#d1d5db" text-anchor="middle">cleanup</text>
+  </g>
+  <g class="bg" data-q="Q4" data-name="Neo4j orphan node detection" data-mag="3" data-mcp="check_drift" data-api="mcp_server/app.py · check_drift tool">
+    <circle cx="590" cy="345" r="12" fill="rgba(107,114,128,0.11)" stroke="#6b7280" stroke-width="0.8"/>
+    <text class="bl" x="590" y="358" font-size="9" fill="#d1d5db" text-anchor="middle">orphan nodes</text>
+  </g>
+
+  <!-- LEGEND -->
+  <g transform="translate(36,397)">
+    <text x="0" y="0" font-family="IBM Plex Mono,monospace" font-size="9" fill="rgba(255,255,255,0.22)" letter-spacing="0.1em">MAGNITUDINE IMPATTO</text>
+    <circle cx="14"  cy="15" r="8"  fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="0.8"/>
+    <text x="26"  y="19" font-family="IBM Plex Mono,monospace" font-size="9" fill="rgba(255,255,255,0.38)">Bassa (1–4)</text>
+    <circle cx="106" cy="14" r="13" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="0.8"/>
+    <text x="123" y="19" font-family="IBM Plex Mono,monospace" font-size="9" fill="rgba(255,255,255,0.38)">Media (5–7)</text>
+    <circle cx="213" cy="13" r="18" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="0.8"/>
+    <text x="235" y="19" font-family="IBM Plex Mono,monospace" font-size="9" fill="rgba(255,255,255,0.38)">Alta (8–10)</text>
+    <text x="355" y="19" font-family="IBM Plex Mono,monospace" font-size="9" fill="rgba(255,255,255,0.20)">← hover per MCP tool e modulo Python</text>
+  </g>
+
+</svg>
+</div>
+
+<hr class="sep">
+
+<!-- ══ 02: REQUISITI FUNZIONALI ══ -->
+<div class="sl">02 — Requisiti Funzionali per Quadrante</div>
+
+<!-- Q1 -->
+<div class="rs">
+  <div class="rh"><div class="rd" style="background:var(--q1)"></div><h2>Q1 · Esegui ora — Risposta a eventi critici</h2><span class="rt">RF-Q1-01 … RF-Q1-06</span></div>
+  <table>
+    <thead><tr><th>ID</th><th>Requisito</th><th>Priorità</th><th>Trigger</th><th>Modulo Sistema</th></tr></thead>
+    <tbody>
+      <tr><td>RF-Q1-01</td><td>Il sistema DEVE rilevare blast radius attivo tramite BFS Neo4j e attivare automaticamente MCP <code>get_recovery_plan</code> entro 30 secondi dall'evento originante.</td><td><span class="bm must">MUST</span></td><td>bfs_with_latency result</td><td><span class="bm impl">cascading_failure.py ✓</span></td></tr>
+      <tr><td>RF-Q1-02</td><td>Il sistema DEVE calcolare RTO/RPO effettivo per recovery strategy (<code>replica_fallback</code>, <code>multi_az</code>, <code>stateless</code>) e classificare Q1 quando <code>worst_case_rto_minutes</code> supera il target.</td><td><span class="bm must">MUST</span></td><td>rto_rpo_calculator output</td><td><span class="bm impl">rto_rpo_calculator.py ✓</span></td></tr>
+      <tr><td>RF-Q1-03</td><td>Il sistema DEVE generare playbook contestualizzato per ogni evento Q1: sequenza per recovery strategy, owner (on-call/DBA/SRE), comandi eseguibili, rollback plan. Generazione via Ollama LLM + Qdrant context retrieval.</td><td><span class="bm must">MUST</span></td><td>Q1 classification event</td><td><span class="bm impl">playbook_generator.py ✓</span></td></tr>
+      <tr><td>RF-Q1-04</td><td>Il sistema DEVE esporre MCP <code>simulate_disaster</code> con classificazione Q1 automatica quando <code>blast_radius</code> include nodi a distanza ≤ 2 hops e <code>severity=critical</code>.</td><td><span class="bm must">MUST</span></td><td>MCP simulate_disaster result</td><td><span class="bm impl">mcp_server/app.py ✓</span></td></tr>
+      <tr><td>RF-Q1-05</td><td>Il sistema DOVREBBE notificare il team DBA e applicativo entro 60 secondi dall'escalation Q1, con evidenza di <code>worst_case_rto_minutes</code>, lista <code>blast_radius</code> e link al SimulationReport.</td><td><span class="bm sho">SHOULD</span></td><td>Q1 escalation command</td><td><span class="bm new">AlertRouter — NEW</span></td></tr>
+      <tr><td>RF-Q1-06</td><td>Il sistema DEVE conservare la timeline completa (<code>timeline_steps[]</code> con <code>step_time_ms</code>) su log immutabile per audit post-mortem validabile via <code>/api/postmortem</code>.</td><td><span class="bm must">MUST</span></td><td>Simulation timeline complete</td><td><span class="bm impl">api/postmortem.py ✓</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Q2 -->
+<div class="rs">
+  <div class="rh"><div class="rd" style="background:var(--q2)"></div><h2>Q2 · Pianifica — Simulazione e miglioramento continuo</h2><span class="rt">RF-Q2-01 … RF-Q2-06</span></div>
+  <table>
+    <thead><tr><th>ID</th><th>Requisito</th><th>Priorità</th><th>Trigger</th><th>Modulo Sistema</th></tr></thead>
+    <tbody>
+      <tr><td>RF-Q2-01</td><td>Il sistema DEVE supportare la schedulazione di simulazioni DR periodiche tramite MCP <code>simulate_disaster</code> in dry-run su ambienti non-prod, con depth configurabile (default: 5).</td><td><span class="bm must">MUST</span></td><td>Scheduled simulation cron</td><td><span class="bm impl">mcp_server/app.py ✓</span></td></tr>
+      <tr><td>RF-Q2-02</td><td>Il sistema DEVE generare SimulationReport a 5 sezioni post-simulazione (Executive Summary, Impact Table, Timeline, Root Cause, Mitigation+Arch Recommendations) con gap classificati High/Medium/Low.</td><td><span class="bm must">MUST</span></td><td>Simulation completion event</td><td><span class="bm impl">SimulationReport.jsx ✓</span></td></tr>
+      <tr><td>RF-Q2-03</td><td>Il sistema DOVREBBE aggiornare automaticamente lo schema Neo4j basato su learnings da simulazioni, mantenendo storico versioni tramite migration scripts.</td><td><span class="bm sho">SHOULD</span></td><td>Post-simulation analysis</td><td><span class="bm impl">db/migrations/ ✓</span></td></tr>
+      <tr><td>RF-Q2-04</td><td>Il sistema DEVE produrre pacchetti documentali ARB-ready per raccomandazioni High Impact tramite <code>export_scenarios_to_word.py</code>: executive summary, as-is vs to-be, effort, business case.</td><td><span class="bm must">MUST</span></td><td>High-impact recommendation</td><td><span class="bm impl">export_scenarios_to_word.py ✓</span></td></tr>
+      <tr><td>RF-Q2-05</td><td>Il sistema DOVREBBE confrontare risultati di simulazioni successive tramite VictoriaMetrics MetricsQL (sliding window 90 giorni) per evidenziare trend RTO/RPO nel tempo, con dashboard dedicata.</td><td><span class="bm sho">SHOULD</span></td><td>Multi-run comparison</td><td><span class="bm impl">victoriametrics_client.py ✓</span></td></tr>
+      <tr><td>RF-Q2-06</td><td>Il sistema POTREBBE applicare chaos engineering per scenari combinati (failure storage + network degradation) tramite <code>/api/chaos</code>, calcolando RTO worst-case e resilience score.</td><td><span class="bm co">COULD</span></td><td>Chaos scenario command</td><td><span class="bm impl">api/chaos.py ✓</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Q3 -->
+<div class="rs">
+  <div class="rh"><div class="rd" style="background:var(--q3)"></div><h2>Q3 · Delega — Auto-remediation e risposta automatizzata</h2><span class="rt">RF-Q3-01 … RF-Q3-05</span></div>
+  <table>
+    <thead><tr><th>ID</th><th>Requisito</th><th>Priorità</th><th>Trigger</th><th>Modulo Sistema</th></tr></thead>
+    <tbody>
+      <tr><td>RF-Q3-01</td><td>Il sistema DEVE classificare in Q3 quando la degradazione rimane entro il 70% del threshold RTO/RPO, selezionando i <code>_STATIC_STEPS_BY_STRATEGY</code> appropriati senza intervento umano.</td><td><span class="bm must">MUST</span></td><td>Warning-level VictoriaMetrics</td><td><span class="bm impl">playbook_generator.py ✓</span></td></tr>
+      <tr><td>RF-Q3-02</td><td>Il sistema DEVE integrare con ServiceNow per creazione automatica ticket P3/P4 per eventi Q3, con assignment group corretto e SLA di risoluzione pre-configurato.</td><td><span class="bm must">MUST</span></td><td>Q3 classification event</td><td><span class="bm new">ITSMConnector — NEW</span></td></tr>
+      <tr><td>RF-Q3-03</td><td>Il sistema DOVREBBE eseguire playbook auto-remediation per strategie <code>replica_fallback</code> e <code>stateless</code>, tracciando ogni azione con outcome e timestamp via structlog.</td><td><span class="bm sho">SHOULD</span></td><td>Auto-remediation trigger</td><td><span class="bm impl">playbook_generator.py ✓</span></td></tr>
+      <tr><td>RF-Q3-04</td><td>Il sistema DEVE promuovere automaticamente un evento da Q3 a Q1 se la condizione persiste oltre 15 minuti o se il trend VictoriaMetrics indica deterioramento verso la soglia critica.</td><td><span class="bm must">MUST</span></td><td>Escalation timer / trend</td><td><span class="bm new">EisenhowerClassifier — NEW</span></td></tr>
+      <tr><td>RF-Q3-05</td><td>Il sistema POTREBBE applicare Qdrant semantic search per identificare pattern ricorrenti in eventi Q3 e proporre nuove regole di auto-remediation basate su storico simulazioni.</td><td><span class="bm co">COULD</span></td><td>Qdrant similarity search</td><td><span class="bm impl">db/qdrant_client.py ✓</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Q4 -->
+<div class="rs">
+  <div class="rh"><div class="rd" style="background:var(--q4)"></div><h2>Q4 · Elimina — Governance e pulizia automatica</h2><span class="rt">RF-Q4-01 … RF-Q4-04</span></div>
+  <table>
+    <thead><tr><th>ID</th><th>Requisito</th><th>Priorità</th><th>Trigger</th><th>Modulo Sistema</th></tr></thead>
+    <tbody>
+      <tr><td>RF-Q4-01</td><td>Il sistema DEVE gestire LRU eviction dei playbook obsoleti tramite <code>SimulationCache</code>, archiviando simulazioni scadute oltre retention configurabile (default: 30 giorni).</td><td><span class="bm must">MUST</span></td><td>Daily cleanup job</td><td><span class="bm impl">db/simulation_cache.py ✓</span></td></tr>
+      <tr><td>RF-Q4-02</td><td>Il sistema DEVE rilevare nodi orfani nel grafo Neo4j (nessuna relazione <code>DEPENDS_ON</code>) tramite MCP <code>check_drift</code> e segnalarli per review con impact analysis automatica.</td><td><span class="bm must">MUST</span></td><td>check_drift scan</td><td><span class="bm impl">mcp_server/app.py ✓</span></td></tr>
+      <tr><td>RF-Q4-03</td><td>Il sistema DOVREBBE applicare retention policy configurabile su log simulazione e telemetria VictoriaMetrics storica, con purge automatico e indice Qdrant aggiornato.</td><td><span class="bm sho">SHOULD</span></td><td>Retention policy timer</td><td><span class="bm impl">victoriametrics_client.py ✓</span></td></tr>
+      <tr><td>RF-Q4-04</td><td>Il sistema DOVREBBE de-duplicare alert da sorgenti multiple che descrivono lo stesso evento Neo4j, mantenendo un solo nodo attivo nel grafo e correlando le sorgenti nel metadata.</td><td><span class="bm sho">SHOULD</span></td><td>Alert dedup query</td><td><span class="bm new">EventCorrelator — NEW</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<hr class="sep">
+
+<!-- ══ 03: ALGORITMO PYTHON ══ -->
+<div class="sl">03 — Algoritmo di classificazione Eisenhower — Python · da aggiungere al progetto</div>
+<div class="ab">
+  <div class="ah">
+    <div class="dot" style="background:#ef4444"></div>
+    <div class="dot" style="background:#f59e0b"></div>
+    <div class="dot" style="background:#10b981"></div>
+    <span>backend/algorithms/eisenhower_classifier.py · NEW — integra con i moduli esistenti</span>
+  </div>
+  <pre><span class="cm">"""
+Eisenhower DR Classifier — integra con i moduli esistenti del progetto:
+  cascading_failure.py  → bfs_with_latency()        (già implementato ✓)
+  rto_rpo_calculator.py → calculate_effective_rto()  (già implementato ✓)
+  playbook_generator.py → generate_playbook()        (già implementato ✓)
+  mcp_server/app.py     → simulate_disaster, get_recovery_plan, check_drift (✓)
+"""</span>
+<span class="kw">from</span> <span class="fn">dataclasses</span> <span class="kw">import</span> dataclass
+<span class="kw">from</span> <span class="fn">enum</span>        <span class="kw">import</span> Enum
+<span class="kw">from</span> <span class="fn">models.enhanced_graph</span> <span class="kw">import</span> EnhancedSimulationWithTimeline
+
+
+<span class="kw">class</span> <span class="fn">EisenhowerQuadrant</span>(str, Enum):
+    Q1 = <span class="str">"Q1"</span>  <span class="cm"># Urgente + Importante  → get_recovery_plan immediato</span>
+    Q2 = <span class="str">"Q2"</span>  <span class="cm"># Non Urgente + Imp.    → simulate_disaster pianificato</span>
+    Q3 = <span class="str">"Q3"</span>  <span class="cm"># Urgente + Non Imp.    → static playbook steps</span>
+    Q4 = <span class="str">"Q4"</span>  <span class="cm"># Non Urgente + Non Imp → cleanup / check_drift</span>
+
+
+<span class="de">@dataclass</span>
+<span class="kw">class</span> <span class="fn">EisenhowerInput</span>:
+    simulation:          EnhancedSimulationWithTimeline
+    rto_target_minutes:  float  <span class="cm"># da proprietà Neo4j del nodo</span>
+    rpo_target_minutes:  float
+    affects_production:  bool
+    cascade_in_progress: bool
+    replication_lag_min: float = <span class="nu">0.0</span>
+
+
+<span class="kw">def</span> <span class="fn">classify_dr_event</span>(inp: <span class="fn">EisenhowerInput</span>) -> <span class="fn">EisenhowerQuadrant</span>:
+    <span class="cm"># Valori calcolati da rto_rpo_calculator.py (già implementato)</span>
+    rto_breach = inp.simulation.worst_case_rto_minutes > inp.rto_target_minutes
+    rpo_breach = inp.replication_lag_min              > inp.rpo_target_minutes
+
+    <span class="cm"># Blast radius critico: ≥1 nodo a distanza ≤2 hops (da bfs_with_latency)</span>
+    critical_blast = <span class="fn">any</span>(n.distance <= <span class="nu">2</span> <span class="kw">for</span> n <span class="kw">in</span> inp.simulation.blast_radius)
+
+    <span class="cm"># Urgente: breach confermato o cascading failure in corso</span>
+    is_urgent    = rto_breach <span class="kw">or</span> rpo_breach <span class="kw">or</span> inp.cascade_in_progress
+    <span class="cm"># Importante: impatta produzione o blast radius critico</span>
+    is_important = inp.affects_production <span class="kw">or</span> critical_blast <span class="kw">or</span> rto_breach
+
+    <span class="kw">if</span> is_urgent     <span class="kw">and</span> is_important:  <span class="kw">return</span> EisenhowerQuadrant.Q1
+    <span class="kw">if not</span> is_urgent <span class="kw">and</span> is_important:  <span class="kw">return</span> EisenhowerQuadrant.Q2
+    <span class="kw">if</span> is_urgent     <span class="kw">and not</span> is_important: <span class="kw">return</span> EisenhowerQuadrant.Q3
+    <span class="kw">return</span> EisenhowerQuadrant.Q4
+
+
+<span class="cm"># Routing MCP tool per quadrante (mcp_server/app.py)</span>
+QUADRANT_MCP_ROUTES: dict[EisenhowerQuadrant, str] = {
+    EisenhowerQuadrant.Q1: <span class="str">"get_recovery_plan"</span>,  <span class="cm"># immediato, priorità max</span>
+    EisenhowerQuadrant.Q2: <span class="str">"simulate_disaster"</span>,  <span class="cm"># dry-run pianificato</span>
+    EisenhowerQuadrant.Q3: <span class="str">"get_recovery_plan"</span>,  <span class="cm"># static steps, auto-exec</span>
+    EisenhowerQuadrant.Q4: <span class="str">"check_drift"</span>,       <span class="cm"># cleanup e orphan detection</span>
+}
+
+<span class="cm"># Soglie per classificazione warning (Q3) e escalation Q3→Q1</span>
+URGENCY_RATIO_WARN:       float = <span class="nu">0.70</span>  <span class="cm"># 70% del target → Q3</span>
+ESCALATION_WINDOW_MIN:    float = <span class="nu">15.0</span>  <span class="cm"># minuti prima della promozione Q3→Q1</span></pre>
+</div>
+
+<hr class="sep">
+
+<!-- ══ 04: ARCHITETTURA ══ -->
+<div class="sl">04 — Mapping su AI Digital Twin DR Platform — componenti esistenti e nuovi</div>
+<div class="ag">
+  <div class="ac">
+    <div class="act">Neo4j 5.18 · Graph Database</div>
+    <div class="acl">Topologia e BFS traversal</div>
+    <p>Sorgente di verità del grafo infrastrutturale. Schema: <code>(:Node)</code> con proprietà <code>rto_minutes</code>, <code>rpo_minutes</code>, <code>recovery_strategy</code>. Relazioni <code>-[:DEPENDS_ON]-&gt;</code> per BFS cascading failure. Il classificatore Eisenhower legge <code>blast_radius</code> e <code>worst_case_rto_minutes</code> da <code>neo4j_client.py</code>. Indici su <code>Node(id)</code> per lookup O(1). Porta 7474/7687.</p>
+  </div>
+  <div class="ac">
+    <div class="act">FastAPI · Backend Python 3.12</div>
+    <div class="acl">REST API e logica di simulazione</div>
+    <p>Endpoint <code>POST /api/dr/simulate</code> esegue BFS + <code>rto_rpo_calculator</code> e restituisce <code>EnhancedSimulationWithTimeline</code>. Il classificatore Eisenhower viene invocato post-simulazione per determinare il quadrante e instradare verso il MCP tool corretto. Rate limiting e API key auth già implementati in <code>api/dependencies.py</code>. Porta 8001.</p>
+  </div>
+  <div class="ac">
+    <div class="act">MCP Server · stdio · Porta 9001</div>
+    <div class="acl">Tool exposure per AI agents</div>
+    <p>Espone 4 tool: <code>simulate_disaster</code> (BFS + RTO/RPO), <code>get_recovery_plan</code> (playbook generation via Ollama + Qdrant), <code>check_drift</code> (Terraform vs Neo4j diff), <code>get_simulation_timeline</code> (query step-by-step). Integrazione diretta con Claude Code, GitHub Copilot e altri AI agents. Il clasificatore Eisenhower aggiungerà routing automatico Q1→Q3.</p>
+  </div>
+  <div class="ac">
+    <div class="act">Playbook Generator · Ollama + Qdrant</div>
+    <div class="acl">Runbook per quadrante Q1 e Q3</div>
+    <p>Per Q1/Q3: seleziona <code>_STATIC_STEPS_BY_STRATEGY</code> (<code>replica_fallback</code>, <code>multi_az</code>, <code>stateless</code>, <code>backup_fallback</code>, <code>generic</code>) + chiamata Ollama LLM (<code>nomic-embed-text</code>, 768-dim) con context RAG da Qdrant. Step includono <code>owner</code> (DBA/SRE/on-call), <code>estimated_minutes</code> e comandi eseguibili.</p>
+  </div>
+  <div class="ac">
+    <div class="act">VictoriaMetrics · Time-Series DB</div>
+    <div class="acl">Metriche live e trigger Q3</div>
+    <p>Scraping Prometheus: <code>replication_lag_seconds</code>, <code>node_cpu_seconds_total</code>, <code>http_requests_total</code>, <code>application_errors_total</code>. MetricsQL queries per rilevare Q3 (warning entro SLA) e trend deterioramento per promozione Q3→Q1. Retention 30 giorni. Basis per trend RTO/RPO sliding window 90 giorni (Q2). Porta 8428.</p>
+  </div>
+  <div class="ac">
+    <div class="act">Compliance + What-If + Postmortem</div>
+    <div class="acl">Governance lifecycle Q2</div>
+    <p><code>ComplianceDashboard</code> audita RTO/RPO per ogni nodo (Pass/Fail/Warning). <code>WhatIfAnalysis</code> testa modifiche architetturali con nodi virtuali prima del deploy. <code>PostmortemView</code> confronta simulation timeline vs incidente reale per validare il classificatore. Tutti già implementati in <code>api/compliance.py</code>, <code>api/whatif.py</code>, <code>api/postmortem.py</code>.</p>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- ══ 05: NFR ══ -->
+<div class="sl">05 — Requisiti Non Funzionali</div>
+<div class="ng">
+  <div class="nc"><div class="ni">RNF-01 · Latenza di classificazione</div><div class="nn">Tempo di risposta Eisenhower Engine</div><div class="nd">Il classificatore assegna il quadrante e instrada verso il MCP tool corretto entro la finestra definita. Il BFS Neo4j per depth=5 è già benchmarkato a &lt;500ms; il classificatore aggiunge &lt;5ms di overhead computazionale.</div><div class="nv">≤ 30s (Q1) · ≤ 5min (Q2/Q3) · best-effort (Q4)</div></div>
+  <div class="nc"><div class="ni">RNF-02 · Disponibilità</div><div class="nn">Uptime della DR Platform</div><div class="nd">Il backend FastAPI deve essere attivo anche durante un DR in corso. Docker Compose v2 con health check configurati su tutti i 6 container (neo4j, backend, frontend, victoriametrics, qdrant, ollama). Il classificatore non può fallire durante l'emergenza che gestisce.</div><div class="nv">99.95% uptime · Docker healthcheck su tutti i container</div></div>
+  <div class="nc"><div class="ni">RNF-03 · Accuratezza</div><div class="nn">False positive / False negative rate</div><div class="nd">Il classificatore deve minimizzare i falsi Q1 (alert storm) e i mancati rilevamenti. Validato sulla test suite esistente <code>test_enhanced_simulation.py</code> con scenari storici reali e simulati. Soglie <code>URGENCY_RATIO_WARN=0.70</code> configurabili.</div><div class="nv">False Q1 rate &lt; 2% · Missed Q1 = 0% · coverage &gt; 90%</div></div>
+  <div class="nc"><div class="ni">RNF-04 · Tracciabilità</div><div class="nn">Audit log immutabile (structlog)</div><div class="nd">Ogni classificazione tracciata: quadrante, <code>simulation_id</code>, <code>worst_case_rto</code>, MCP tool invocato, timestamp. Già su structlog; estendere con WORM storage per DORA compliance. Validabile via <code>/api/postmortem</code>.</div><div class="nv">structlog JSON · 365 giorni retention · DORA-compliant</div></div>
+  <div class="nc"><div class="ni">RNF-05 · Configurabilità</div><div class="nn">RTO/RPO thresholds per-nodo Neo4j</div><div class="nd">Ogni nodo Neo4j ha proprietà <code>rto_minutes</code> e <code>rpo_minutes</code> indipendenti, settabili via <code>seed-rto-rpo.sh</code> o <code>bootstrap_neo4j.py</code>. Il classificatore è agnostico dal tipo di nodo — legge solo properties generiche Neo4j.</div><div class="nv">Neo4j property update · No-downtime · seed-rto-rpo.sh ✓</div></div>
+  <div class="nc"><div class="ni">RNF-06 · Sicurezza</div><div class="nn">API key + rate limiting già implementati</div><div class="nd">Il trigger playbook Q1 richiede API key (<code>api/dependencies.py</code> con <code>verify_api_key</code> già implementato) e rate limiting via <code>limiter</code>. Tool MCP stdio non espongono endpoint pubblici. Doppia autorizzazione per ambienti produzione.</div><div class="nv">API key auth ✓ · Rate limiter ✓ · MCP stdio isolation</div></div>
+  <div class="nc"><div class="ni">RNF-07 · Estensibilità</div><div class="nn">Nuovi nodi via Terraform ingest</div><div class="nd">Aggiungere una nuova applicazione al perimetro DR richiede solo l'ingestione del Terraform state via <code>parsers/infra.py</code>. Il classificatore è completamente agnostico — legge <code>rto_minutes</code> e <code>recovery_strategy</code> come property Neo4j generiche.</div><div class="nv">Terraform → parsers/infra.py → Neo4j · Zero code changes</div></div>
+  <div class="nc"><div class="ni">RNF-08 · Testing</div><div class="nn">Test suite esistente + nuovi unit test</div><div class="nd">Il progetto ha già test suite completa in <code>backend/tests/</code>. Il classificatore Eisenhower deve aggiungere test per tutti i casi limite: breach al 100%, breach al 70%, <code>cascade_in_progress</code> override, promozione Q3→Q1 su timer. Fixtures Neo4j mock già in <code>tests/conftest.py</code>.</div><div class="nv">pytest + pytest-asyncio · conftest.py esistente ✓</div></div>
+</div>
+
+<hr class="sep">
+
+<!-- ══ 06: CLAUDE CODE ══ -->
+<div class="sl">06 — Note di implementazione per Claude Code</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:20px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:8px;letter-spacing:.1em">FILE DA CREARE NEL PROGETTO ESISTENTE</div>
+    <pre style="font-size:11px;color:var(--text2);padding:0;background:transparent;line-height:1.6">ai-digital-twin-dr/
+└── backend/
+    ├── algorithms/
+    │   └── eisenhower_classifier.py  <span class="cm"># NEW ← da creare (sezione 03)</span>
+    ├── api/
+    │   └── eisenhower_router.py      <span class="cm"># NEW ← routing per quadrante</span>
+    ├── mcp_server/
+    │   └── app.py                    <span class="cm"># MODIFY: Q1→get_recovery_plan auto</span>
+    └── tests/
+        └── test_eisenhower.py        <span class="cm"># NEW ← unit test classifier</span>
+
+<span class="cm"># Tutto il resto è già implementato ✓</span>
+<span class="cm"># cascading_failure.py  → bfs_with_latency()</span>
+<span class="cm"># rto_rpo_calculator.py → calculate_effective_rto/rpo()</span>
+<span class="cm"># playbook_generator.py → _STATIC_STEPS_BY_STRATEGY</span>
+<span class="cm"># mcp_server/app.py     → simulate_disaster, get_recovery_plan</span>
+<span class="cm"># simulation_cache.py   → LRU eviction (Q4)</span>
+<span class="cm"># postmortem.py         → audit trail (RF-Q1-06)</span>
+<span class="cm"># chaos.py              → chaos engineering (RF-Q2-06)</span></pre>
+  </div>
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:20px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:8px;letter-spacing:.1em">DIPENDENZE PYTHON (requirements.txt esistente)</div>
+    <pre style="font-size:11px;color:var(--text2);padding:0;background:transparent;line-height:1.6"><span class="cm"># Già presenti nel progetto — nessuna aggiunta richiesta</span>
+fastapi&gt;=0.110        <span class="cm"># REST API ✓</span>
+uvicorn[standard]     <span class="cm"># ASGI server ✓</span>
+pydantic&gt;=2.0         <span class="cm"># data models ✓</span>
+neo4j&gt;=5.18           <span class="cm"># graph DB client ✓</span>
+qdrant-client&gt;=1.9   <span class="cm"># vector DB ✓</span>
+httpx                 <span class="cm"># Ollama API calls ✓</span>
+structlog             <span class="cm"># structured logging ✓</span>
+prometheus-client     <span class="cm"># metrics ✓</span>
+
+<span class="cm"># Testing (già configurato)</span>
+pytest                <span class="cm"># ✓</span>
+pytest-asyncio        <span class="cm"># ✓</span>
+pytest-cov            <span class="cm"># ✓</span>
+
+<span class="cm"># Il classificatore Eisenhower usa solo</span>
+<span class="cm"># moduli interni già installati.</span>
+<span class="cm"># Zero dipendenze aggiuntive richieste.</span></pre>
+  </div>
+</div>
+
+<div style="background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.18);border-radius:6px;padding:20px 24px;margin-bottom:32px">
+  <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:10px;letter-spacing:.12em">PROMPT SUGGERITO PER CLAUDE CODE — AVVIO IMPLEMENTAZIONE</div>
+  <p style="font-size:13px;color:var(--text2);line-height:1.7">
+    <em>"Il progetto <code>ai-digital-twin-dr</code> è già strutturato con backend Python/FastAPI (vedere zip allegato). Leggi il documento <code>eisenhower-dr-simulation.html</code> come specifica. Crea <code>backend/algorithms/eisenhower_classifier.py</code> seguendo la classe <code>EisenhowerInput</code> e la funzione <code>classify_dr_event</code> della sezione 03. Integra il classificatore in <code>backend/api/dr.py</code> dopo la chiamata a <code>bfs_with_latency</code>, aggiungendo il campo <code>eisenhower_quadrant</code> alla response <code>EnhancedSimulationWithTimeline</code>. In <code>mcp_server/app.py</code>, aggiungi routing automatico: quando <code>simulate_disaster</code> restituisce Q1, invoca automaticamente <code>get_recovery_plan</code>. Scrivi i test in <code>backend/tests/test_eisenhower.py</code> coprendo: breach al 100%, breach al 70%, <code>cascade_in_progress=True</code> su nodo non-critical, promozione Q3→Q1 su escalation timer. Usa <code>tests/conftest.py</code> come riferimento per i fixtures Neo4j mock."</em>
+  </p>
+</div>
+
+</main>
+
+<footer>
+  <span>Smart DR Simulator · HERA S.p.A. DSI · REQ-2026_1B17</span>
+  <span>Eisenhower DR Matrix v2.0 · AI Digital Twin DR Platform integration</span>
+  <span>Deadline: 31/12/2026</span>
+</footer>
+
+<script>
+(function(){
+  const tip=document.getElementById('btip');
+  const tq=document.getElementById('tq');
+  const tn=document.getElementById('tn');
+  const tm=document.getElementById('tm');
+  const tp=document.getElementById('tp');
+  const qc={Q1:'#ef4444',Q2:'#f59e0b',Q3:'#3b82f6',Q4:'#6b7280'};
+  const ml={10:'Massima',9:'Critica',8:'Alta',7:'Alta',6:'Media-alta',5:'Media',4:'Media-bassa',3:'Bassa',2:'Bassa',1:'Minima'};
+  const ql={Q1:'URGENTE + IMPORTANTE',Q2:'NON URGENTE + IMPORTANTE',Q3:'URGENTE + NON IMPORTANTE',Q4:'NON URGENTE + NON IMPORTANTE'};
+  document.querySelectorAll('.bg').forEach(function(g){
+    g.addEventListener('mouseenter',function(e){
+      var q=this.dataset.q,m=parseInt(this.dataset.mag);
+      tq.textContent=q+' · '+ql[q]; tq.style.color=qc[q];
+      tn.textContent=this.dataset.name;
+      tm.textContent='Magnitudine: '+m+'/10 — '+(ml[m]||'');
+      tp.textContent='MCP: '+this.dataset.mcp+' · '+this.dataset.api;
+      tip.style.display='block'; mv(e);
+    });
+    g.addEventListener('mousemove',mv);
+    g.addEventListener('mouseleave',function(){tip.style.display='none';});
+  });
+  function mv(e){
+    var x=e.clientX+14,y=e.clientY+14,tw=tip.offsetWidth,th=tip.offsetHeight;
+    tip.style.left=(x+tw>window.innerWidth-8?x-tw-28:x)+'px';
+    tip.style.top=(y+th>window.innerHeight-8?y-th-28:y)+'px';
+  }
+})();
+</script>
+</body>
+</html>
