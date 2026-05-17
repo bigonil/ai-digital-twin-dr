@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Sun, Moon, GitCompare } from 'lucide-react'
+import { Sun, Moon, GitCompare, FileBarChart2 } from 'lucide-react'
 import TopologyViewer from './components/TopologyViewer.jsx'
 import InfrastructureMap from './components/InfrastructureMap.jsx'
 import MetricsDashboard from './components/MetricsDashboard.jsx'
@@ -70,6 +70,9 @@ export default function App() {
   const [savedSims, setSavedSims] = useState([])   // [{result, label}, ...]
   const [showComparison, setShowComparison] = useState(false)
 
+  // Full-screen simulation report modal
+  const [showReport, setShowReport] = useState(false)
+
   // Fetch topology
   const { data: topology, isLoading } = useQuery({
     queryKey: ['topology'],
@@ -91,6 +94,7 @@ export default function App() {
   const handleReset = useCallback(() => {
     setSimulationResult(null)
     setSimulationTime(0)
+    setShowReport(false)
   }, [])
 
   const handleSaveForCompare = useCallback(() => {
@@ -119,6 +123,17 @@ export default function App() {
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {/* View Full Report button */}
+              {isSimulationDone && activeView === 'simulator' && (
+                <button
+                  onClick={() => setShowReport(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-dt-accent hover:bg-blue-500 text-white transition"
+                  title="Open full simulation report"
+                >
+                  <FileBarChart2 size={13} /> Full Report
+                </button>
+              )}
+
               {/* Comparison controls */}
               {simulationResult && activeView === 'simulator' && (
                 <button
@@ -133,7 +148,7 @@ export default function App() {
               {savedSims.length === 2 && (
                 <button
                   onClick={() => setShowComparison(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-dt-accent hover:bg-blue-500 text-white transition"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition"
                 >
                   <GitCompare size={13} /> Compare
                 </button>
@@ -219,9 +234,6 @@ export default function App() {
                     <SimulationTimeline simulationResult={simulationResult} onTimeChange={handleTimeChange} />
                   </div>
                 )}
-
-                {/* Row 5: Report (conditional) */}
-                {isSimulationDone && <SimulationReport simulationResult={simulationResult} topology={topology} />}
               </main>
 
               {/* Column C: Metrics Dashboard (right sidebar, fixed width) */}
@@ -244,6 +256,15 @@ export default function App() {
           labelA={savedSims[0].label}
           labelB={savedSims[1].label}
           onClose={() => setShowComparison(false)}
+        />
+      )}
+
+      {/* Full-screen Simulation Report Modal */}
+      {showReport && simulationResult && (
+        <SimulationReport
+          simulationResult={simulationResult}
+          topology={topology}
+          onClose={() => setShowReport(false)}
         />
       )}
     </ErrorBoundary>
