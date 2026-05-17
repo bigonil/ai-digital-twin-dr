@@ -191,14 +191,17 @@ class PlaybookStep(BaseModel):
     """A single step in a recovery playbook"""
     step: int
     action: str
-    owner: str = "on-call"  # e.g., "DBA", "SRE", "on-call"
+    owner: str = "on-call"  # e.g., "DBA", "SRE", "on-call", "platform-team"
     estimated_minutes: Optional[int] = None
     commands: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
+    verification: Optional[str] = None   # How to confirm the step succeeded
+    rollback: Optional[str] = None       # What to do if this step fails or must be undone
+    risk_level: str = "low"             # "low" | "medium" | "high"
 
 
 class RecoveryPlaybook(BaseModel):
-    """LLM-generated recovery runbook for a node failure"""
+    """AI-generated recovery runbook for a node failure"""
     playbook_id: str
     node_id: str
     node_name: str
@@ -208,10 +211,15 @@ class RecoveryPlaybook(BaseModel):
     rpo_minutes: Optional[int] = None
     generated_at: str  # ISO timestamp
     summary: str
+    business_impact: Optional[str] = None      # Revenue/user impact of the failure
+    risk_assessment: Optional[str] = None      # Overall recovery risk and caveats
+    prerequisites: list[str] = Field(default_factory=list)        # Must be true before starting
+    communication_plan: list[str] = Field(default_factory=list)   # Who/when to notify
     steps: list[PlaybookStep]
+    estimated_total_minutes: Optional[int] = None  # Sum of step durations
     doc_references: list[str] = Field(default_factory=list)  # Qdrant source_files used
     llm_model: str
-    generation_source: str = "llm"  # "llm" or "static"
+    generation_source: str = "claude"  # "claude" or "static"
 
 
 class PlaybookRequest(BaseModel):
