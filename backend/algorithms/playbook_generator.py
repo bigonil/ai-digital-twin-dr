@@ -66,8 +66,8 @@ def _build_claude_prompt(
     node: dict,
     downstream: list[dict],
     upstream: list[dict],
-    doc_context: str,
 ) -> str:
+    """Build the node-specific (non-cached) portion of the user message."""
     def _fmt_nodes(nodes: list[dict]) -> str:
         if not nodes:
             return "  (none)"
@@ -76,12 +76,6 @@ def _build_claude_prompt(
             + (f" — region: {n['region']}" if n.get("region") else "")
             for n in nodes[:12]
         )
-
-    doc_section = (
-        f"\n## Relevant DR Documentation (from knowledge base)\n{doc_context[:3500]}"
-        if doc_context.strip()
-        else ""
-    )
 
     schema = """{
   "summary": "One-sentence executive summary of the failure scenario and recovery approach",
@@ -131,7 +125,6 @@ def _build_claude_prompt(
 
 ### Upstream Dependencies (services this node depends on — {len(upstream)} nodes)
 {_fmt_nodes(upstream)}
-{doc_section}
 
 Return ONLY the following JSON (no other text):
 {schema}
@@ -146,17 +139,54 @@ Requirements:
 - risk_level: "high" for steps that touch production data or DNS, "medium" for config changes, "low" for observation"""
 
 
-async def _call_claude(prompt: str, settings) -> str:
-    """Call Claude API and return the raw text response."""
+async def _call_claude(prompt: str, doc_context: str, settings) -> str:
+    """
+    Call Claude API with prompt caching.
+
+    Cache layout (static → dynamic, left to right):
+      1. system block   — _SYSTEM_PROMPT, identical on every call → cache_control
+      2. user block 0   — Qdrant doc context, changes by node type → cache_control
+      3. user block 1   — node-specific prompt (name/region/topology) → NOT cached
+    """
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-    message = await client.messages.create(
+
+    system_blocks = [
+        {
+            "type": "text",
+            "text": _SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    user_content: list[dict] = []
+    if doc_context.strip():
+        user_content.append({
+            "type": "text",
+            "text": f"## Relevant DR Documentation (from knowledge base)\n{doc_context[:3500]}",
+            "cache_control": {"type": "ephemeral"},
+        })
+    user_content.append({"type": "text", "text": prompt})
+
+    message = await client.beta.messages.create(
         model=settings.anthropic_model,
         max_tokens=8192,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
+        system=system_blocks,
+        messages=[{"role": "user", "content": user_content}],
+        betas=["prompt-caching-2024-07-31"],
     )
+
     if message.stop_reason == "max_tokens":
         log.warning("playbook_claude_truncated", stop_reason="max_tokens")
+
+    usage = message.usage
+    log.info(
+        "playbook_claude_cache",
+        cache_created=getattr(usage, "cache_creation_input_tokens", 0),
+        cache_read=getattr(usage, "cache_read_input_tokens", 0),
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+    )
+
     return message.content[0].text
 
 
@@ -293,8 +323,8 @@ async def generate_playbook(
 
     if use_claude:
         try:
-            prompt = _build_claude_prompt(node, downstream, upstream, doc_context)
-            raw = await _call_claude(prompt, settings)
+            prompt = _build_claude_prompt(node, downstream, upstream)
+            raw = await _call_claude(prompt, doc_context, settings)
             parsed = _extract_json(raw)
             summary = parsed.get("summary", "")
             business_impact = parsed.get("business_impact")
