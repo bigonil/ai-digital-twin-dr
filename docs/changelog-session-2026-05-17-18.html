@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Session Changelog · 17–18 Maggio 2026</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg:#0d0f14; --bg2:#13161e; --bg3:#1a1e2a;
+    --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+    --text:#e2e4ec; --text2:#8b90a4; --text3:#555b72;
+    --accent:#3b82f6; --green:#10b981; --red:#ef4444;
+    --yellow:#f59e0b; --purple:#a78bfa; --cyan:#22d3ee;
+    --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.65;min-height:100vh}
+
+  /* ── HEADER ── */
+  header{border-bottom:1px solid var(--border);padding:36px 56px 28px;display:flex;align-items:flex-start;justify-content:space-between;gap:32px}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:10px}
+  h1{font-weight:600;font-size:26px;line-height:1.25;letter-spacing:-.02em;margin-bottom:10px}
+  h1 span{color:var(--text2);font-weight:300}
+  .subtitle{color:var(--text2);font-size:13px;max-width:560px;line-height:1.7}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .pill{font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:4px 10px;border-radius:4px;border:1px solid var(--border2);color:var(--text2);background:var(--bg3)}
+  .pill.g{border-color:rgba(16,185,129,.3);color:var(--green);background:rgba(16,185,129,.08)}
+  .pill.b{border-color:rgba(59,130,246,.3);color:#60a5fa;background:rgba(59,130,246,.08)}
+  .pill.r{border-color:rgba(239,68,68,.3);color:#f87171;background:rgba(239,68,68,.08)}
+  .hdr-right{text-align:right;font-family:var(--mono);font-size:10px;color:var(--text3);line-height:2;white-space:nowrap}
+
+  /* ── LAYOUT ── */
+  main{padding:40px 56px 80px;max-width:1400px}
+  .sl{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--text3);text-transform:uppercase;margin-bottom:20px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  hr.sep{border:none;border-top:1px solid var(--border);margin:48px 0}
+
+  /* ── SUMMARY STRIP ── */
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:40px}
+  .s-card{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:18px 20px}
+  .s-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.12em;margin-bottom:6px;text-transform:uppercase}
+  .s-value{font-family:var(--mono);font-size:28px;font-weight:600;line-height:1;margin-bottom:4px}
+  .s-sub{font-size:12px;color:var(--text2)}
+
+  /* ── COMMIT TIMELINE ── */
+  .timeline{position:relative;padding-left:28px}
+  .timeline::before{content:'';position:absolute;left:6px;top:8px;bottom:8px;width:1px;background:var(--border2)}
+  .commit{position:relative;margin-bottom:32px}
+  .commit-dot{position:absolute;left:-25px;top:10px;width:12px;height:12px;border-radius:50%;border:2px solid var(--bg)}
+  .commit-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .commit-hash{font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 8px;white-space:nowrap;letter-spacing:.06em}
+  .commit-time{font-family:var(--mono);font-size:10px;color:var(--text3);padding:2px 0;white-space:nowrap}
+  .commit-type{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;font-weight:500;letter-spacing:.04em}
+  .type-feat{background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.25)}
+  .type-fix{background:rgba(239,68,68,.10);color:#f87171;border:1px solid rgba(239,68,68,.22)}
+  .type-docs{background:rgba(107,114,128,.12);color:#9ca3af;border:1px solid rgba(107,114,128,.22)}
+  .commit-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px;line-height:1.35}
+  .commit-body{font-size:13px;color:var(--text2);line-height:1.65;margin-bottom:14px}
+  .commit-body li{margin-left:16px;margin-bottom:4px}
+
+  /* ── FILE TAGS ── */
+  .files{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .ftag{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:3px;letter-spacing:.04em}
+  .ftag-new{background:rgba(16,185,129,.10);color:var(--green);border:1px solid rgba(16,185,129,.22)}
+  .ftag-mod{background:rgba(59,130,246,.10);color:#60a5fa;border:1px solid rgba(59,130,246,.22)}
+  .ftag-doc{background:rgba(107,114,128,.10);color:#9ca3af;border:1px solid rgba(107,114,128,.22)}
+
+  /* ── STATS ── */
+  .delta{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.04em}
+  .delta-add{color:#4ade80}
+  .delta-del{color:#f87171}
+
+  /* ── EISENHOWER SECTION ── */
+  .eis-intro{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:24px;margin-bottom:32px}
+  .eis-intro p{font-size:13px;color:var(--text2);line-height:1.75;margin-bottom:12px}
+  .eis-intro p:last-child{margin-bottom:0}
+  .eis-intro code{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px}
+
+  .quad-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:32px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .quad{padding:22px 24px;min-height:200px;position:relative;background:var(--bg2)}
+  .quad:hover{background:var(--bg3)}
+  .quad-n{font-family:var(--mono);font-size:11px;color:var(--text3);position:absolute;top:14px;right:18px}
+  .quad-badge{font-family:var(--mono);font-size:9px;letter-spacing:.10em;padding:3px 8px;border-radius:3px;margin-bottom:10px;display:inline-block;text-transform:uppercase}
+  .quad-title{font-weight:600;font-size:15px;margin-bottom:4px}
+  .quad-desc{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--text3);margin-bottom:12px;text-transform:uppercase}
+  .quad-list{list-style:none;display:flex;flex-direction:column;gap:5px;margin-bottom:40px}
+  .quad-list li{font-size:12px;color:var(--text2);padding-left:14px;position:relative;line-height:1.45}
+  .quad-list li::before{content:'›';position:absolute;left:0;font-size:14px;line-height:1}
+  .quad-footer{position:absolute;bottom:12px;left:24px;right:24px;background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:7px 11px;font-family:var(--mono);font-size:10px;color:var(--text2);display:flex;align-items:center;gap:8px}
+
+  .q1{border-top:2px solid #ef4444}
+  .q1 .quad-badge{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.28)}
+  .q1 .quad-title{color:#f87171} .q1 .quad-list li::before{color:#f87171} .q1 .quad-footer{border-color:rgba(239,68,68,.28)}
+  .q2{border-top:2px solid #f59e0b}
+  .q2 .quad-badge{background:rgba(245,158,11,.10);color:#fbbf24;border:1px solid rgba(245,158,11,.28)}
+  .q2 .quad-title{color:#fbbf24} .q2 .quad-list li::before{color:#fbbf24} .q2 .quad-footer{border-color:rgba(245,158,11,.28)}
+  .q3{border-top:2px solid #3b82f6}
+  .q3 .quad-badge{background:rgba(59,130,246,.10);color:#60a5fa;border:1px solid rgba(59,130,246,.28)}
+  .q3 .quad-title{color:#60a5fa} .q3 .quad-list li::before{color:#60a5fa} .q3 .quad-footer{border-color:rgba(59,130,246,.28)}
+  .q4{border-top:2px solid #6b7280}
+  .q4 .quad-badge{background:rgba(107,114,128,.10);color:#9ca3af;border:1px solid rgba(107,114,128,.25)}
+  .q4 .quad-title{color:#9ca3af} .q4 .quad-list li::before{color:#9ca3af} .q4 .quad-footer{border-color:rgba(107,114,128,.25)}
+
+  .axis-grid{display:grid;grid-template-columns:24px 1fr;grid-template-rows:24px 1fr;gap:0;margin-bottom:8px;align-items:center}
+  .axis-x-labels{display:grid;grid-template-columns:1fr 1fr;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.1em;padding-bottom:6px}
+  .axis-y-label{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.08em;writing-mode:vertical-lr;transform:rotate(180deg);display:flex;align-items:center;justify-content:center}
+
+  /* ── ALGO BLOCK ── */
+  .algo{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;overflow:hidden;margin-bottom:32px}
+  .algo-head{padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--text2)}
+  .dot{width:8px;height:8px;border-radius:50%}
+  pre{margin:0;padding:20px;font-family:var(--mono);font-size:12px;line-height:1.75;overflow-x:auto}
+  .kw{color:#c792ea} .fn{color:#82aaff} .cm{color:var(--text3);font-style:italic}
+  .str{color:#c3e88d} .nu{color:#f78c6c} .de{color:#ffcb6b}
+
+  /* ── FLOW DIAGRAM ── */
+  .flow{display:flex;align-items:center;flex-wrap:wrap;gap:0;margin-bottom:32px}
+  .flow-step{background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:12px 16px;font-size:12px;min-width:160px;text-align:center}
+  .flow-step .fs-label{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.1em;margin-bottom:4px;text-transform:uppercase}
+  .flow-step .fs-name{font-weight:500;font-size:13px}
+  .flow-arr{font-family:var(--mono);font-size:18px;color:var(--text3);padding:0 8px}
+  .flow-q1{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.06)} .flow-q1 .fs-name{color:#f87171}
+  .flow-q2{border-color:rgba(245,158,11,.30);background:rgba(245,158,11,.05)} .flow-q2 .fs-name{color:#fbbf24}
+  .flow-q3{border-color:rgba(59,130,246,.30);background:rgba(59,130,246,.05)} .flow-q3 .fs-name{color:#60a5fa}
+  .flow-q4{border-color:rgba(107,114,128,.25);background:rgba(107,114,128,.05)} .flow-q4 .fs-name{color:#9ca3af}
+
+  /* ── THRESHOLDS TABLE ── */
+  table.thr{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:32px}
+  table.thr thead th{font-family:var(--mono);font-size:10px;letter-spacing:.10em;text-transform:uppercase;color:var(--text3);padding:8px 14px;text-align:left;border-bottom:1px solid var(--border2);font-weight:500}
+  table.thr tbody tr{border-bottom:1px solid var(--border)}
+  table.thr tbody tr:hover{background:var(--bg3)}
+  table.thr tbody td{padding:10px 14px;color:var(--text2);vertical-align:top;line-height:1.5}
+  table.thr tbody td:first-child{font-family:var(--mono);font-size:11px;color:var(--text);white-space:nowrap}
+  table.thr tbody td code{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px}
+
+  footer{border-top:1px solid var(--border);padding:22px 56px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--text3)}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="flex:1">
+    <div class="eyebrow">ATHENA — Predictive Resilience Engine · Session Log</div>
+    <h1>Changelog <span>17–18 Maggio 2026</span></h1>
+    <p class="subtitle">
+      Riepilogo di tutte le modifiche apportate nella sessione di sviluppo di venerdì–domenica–lunedì:
+      integrazione Claude API, arricchimento playbook DR, SimulationReport full-screen modal,
+      classificatore Eisenhower e visualizzazione matrice nel report.
+    </p>
+    <div class="pills">
+      <span class="pill g">9 commit</span>
+      <span class="pill b">Branch: 01_01_04 → 01_01_05</span>
+      <span class="pill b">15 file modificati</span>
+      <span class="pill b">3 file nuovi</span>
+      <span class="pill r">2 nuovi documenti HTML</span>
+    </div>
+  </div>
+  <div class="hdr-right">
+    Branch attivo: 01_01_05<br>
+    Periodo: 17/05 17:56 → 18/05 11:50<br>
+    Autore: bigonil<br>
+    Stack: FastAPI · React · Neo4j<br>
+    LLM: Claude (claude-opus-4-7)<br><br>
+    Stato: PRODUZIONE
+  </div>
+</header>
+
+<main>
+
+<!-- ══ SUMMARY CARDS ══ -->
+<div class="summary-grid">
+  <div class="s-card">
+    <div class="s-label">Commit totali</div>
+    <div class="s-value" style="color:var(--accent)">9</div>
+    <div class="s-sub">17–18 Maggio 2026</div>
+  </div>
+  <div class="s-card">
+    <div class="s-label">File modificati</div>
+    <div class="s-value" style="color:var(--yellow)">18</div>
+    <div class="s-sub">backend + frontend + docs</div>
+  </div>
+  <div class="s-card">
+    <div class="s-label">Linee aggiunte</div>
+    <div class="s-value" style="color:var(--green)">+2 471</div>
+    <div class="s-sub">inserzioni nette</div>
+  </div>
+  <div class="s-card">
+    <div class="s-label">Feature principali</div>
+    <div class="s-value" style="color:var(--purple)">4</div>
+    <div class="s-sub">Claude API · Modal · EUR · Eisenhower</div>
+  </div>
+</div>
+
+<!-- ══ COMMIT TIMELINE ══ -->
+<div class="sl">01 — Timeline commit · 17 Maggio 17:56 → 18 Maggio 11:50</div>
+<div class="timeline">
+
+  <!-- COMMIT 1 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#f59e0b;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">61921ad</code>
+      <span class="commit-time">Dom 17 Mag · 17:56</span>
+      <span class="commit-type type-feat">feat</span>
+    </div>
+    <div class="commit-title">Conversione costi recovery da USD a EUR (tasso fisso 0.92)</div>
+    <div class="commit-body">
+      <p>Tutti i costi del modello sono ora espressi in EUR per allineamento con la contabilità HERA. Il tasso di conversione <code>_USD_TO_EUR = 0.92</code> è applicato a livello di <code>cost_estimator.py</code> in modo centralizzato.</p>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-mod">backend/algorithms/cost_estimator.py</span>
+      <span class="ftag ftag-mod">frontend/src/components/SimulationReport.jsx</span>
+      <span class="ftag ftag-mod">frontend/src/components/SimulationComparison.jsx</span>
+      <span class="ftag ftag-doc">docs/recovery-cost-model.html</span>
+    </div>
+    <div class="delta">+526 / −8 linee &nbsp;·&nbsp; <span class="delta-add">+526</span> <span class="delta-del">−8</span></div>
+  </div>
+
+  <!-- COMMIT 2 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#6b7280;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">808d279</code>
+      <span class="commit-time">Dom 17 Mag · 17:58</span>
+      <span class="commit-type type-docs">docs</span>
+    </div>
+    <div class="commit-title">Aggiunto documento HTML di specifica Eisenhower DR Simulation</div>
+    <div class="commit-body">
+      <p>Documento di specifica completo (<code>eisenhower-dr-simulation.html</code>) con matrice 2×2 interattiva, bubble chart SVG, requisiti funzionali per quadrante (Q1–Q4), algoritmo Python e note di implementazione.</p>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-doc">eisenhower-dr-simulation.html</span>
+    </div>
+    <div class="delta"><span class="delta-add">+663</span> linee · nuovo file</div>
+  </div>
+
+  <!-- COMMIT 3 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#6b7280;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">85f9195</code>
+      <span class="commit-time">Dom 17 Mag · 18:49</span>
+      <span class="commit-type type-docs">docs</span>
+    </div>
+    <div class="commit-title">Changelog HTML completo Priority 1–5</div>
+    <div class="commit-body">
+      <p>Documento HTML riepilogativo di tutte le 38 modifiche delle sessioni precedenti (Priority 1–5), con tabelle per quadrant, tag file New/Modified/Config e sommario.</p>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-doc">docs/changelog-priority1-to-5.html</span>
+    </div>
+    <div class="delta"><span class="delta-add">+680</span> linee · nuovo file</div>
+  </div>
+
+  <!-- COMMIT 4 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#3b82f6;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">6fac124</code>
+      <span class="commit-time">Dom 17 Mag · 19:25</span>
+      <span class="commit-type type-feat">feat</span>
+    </div>
+    <div class="commit-title">Sostituzione LLM Ollama con Claude API (claude-opus-4-7) per il playbook DR</div>
+    <div class="commit-body">
+      <p>Il generatore di playbook ora usa <strong>Anthropic Claude</strong> come motore LLM al posto di Ollama locale. Il sistema recupera fino a 15 nodi downstream + 15 upstream da Neo4j per costruire il contesto topologico e inietta 4 documenti Qdrant (RAG, 3000 char) nel prompt. La chiave API è configurata via variabile d'ambiente (<code>ANTHROPIC_API_KEY</code>) e mai committata in git.</p>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-mod">backend/algorithms/playbook_generator.py</span>
+      <span class="ftag ftag-mod">backend/settings.py</span>
+      <span class="ftag ftag-mod">backend/requirements.txt</span>
+      <span class="ftag ftag-mod">docker-compose.yml</span>
+    </div>
+    <div class="delta"><span class="delta-add">+151</span> <span class="delta-del">−65</span> linee</div>
+  </div>
+
+  <!-- COMMIT 5 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#3b82f6;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">a66d54c</code>
+      <span class="commit-time">Dom 17 Mag · 19:47</span>
+      <span class="commit-type type-feat">feat</span>
+    </div>
+    <div class="commit-title">Arricchimento playbook AI: verification, rollback, risk level, comunicazioni</div>
+    <div class="commit-body">
+      <p>Il playbook generato da Claude è stato significativamente ampliato. Ogni step ora include:</p>
+      <ul>
+        <li><strong>verification</strong> — come confermare che lo step ha avuto successo</li>
+        <li><strong>rollback</strong> — cosa fare se lo step fallisce o deve essere annullato</li>
+        <li><strong>risk_level</strong> — high / medium / low (con badge colorato in UI)</li>
+      </ul>
+      <p style="margin-top:10px">A livello di playbook sono stati aggiunti: <strong>business_impact</strong>, <strong>risk_assessment</strong>, <strong>prerequisites</strong> (lista condizioni prima di iniziare) e <strong>communication_plan</strong> con milestone T+0/T+5/T+15/T+30. La nuova <code>PlaybookPanel.jsx</code> espone tutte queste sezioni in modo visivo con banner colorati e sezioni collassabili.</p>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-mod">backend/models/features.py</span>
+      <span class="ftag ftag-mod">backend/algorithms/playbook_generator.py</span>
+      <span class="ftag ftag-mod">frontend/src/components/PlaybookPanel.jsx</span>
+    </div>
+    <div class="delta"><span class="delta-add">+335</span> <span class="delta-del">−118</span> linee</div>
+  </div>
+
+  <!-- COMMIT 6 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#ef4444;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">368dc37</code>
+      <span class="commit-time">Dom 17 Mag · 19:52</span>
+      <span class="commit-type type-fix">fix</span>
+    </div>
+    <div class="commit-title">Fix JSON troncato: max_tokens 4096→8192 + parser di recupero</div>
+    <div class="commit-body">
+      <p><strong>Root cause:</strong> Claude raggiungeva il limite di 4096 token a metà del JSON producendo una stringa non terminata (<code>Unterminated string at char 9608</code>) che crashava <code>json.loads()</code>.</p>
+      <p style="margin-top:8px"><strong>Fix duplice:</strong></p>
+      <ul>
+        <li><code>max_tokens</code> alzato a <strong>8192</strong> — previene la troncatura per playbook di 7–10 step</li>
+        <li><strong>Parser a 2 fasi</strong> in <code>_extract_json()</code>: se il JSON completo fallisce, trova l'ultimo <code>},↵</code> valido, chiude struttura array+object e rilancia il parse (percorso di recupero con log <code>steps_recovered</code>)</li>
+        <li>Log warning quando <code>stop_reason == "max_tokens"</code> per diagnostica futura</li>
+      </ul>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-mod">backend/algorithms/playbook_generator.py</span>
+    </div>
+    <div class="delta"><span class="delta-add">+47</span> <span class="delta-del">−12</span> linee</div>
+  </div>
+
+  <!-- COMMIT 7 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#3b82f6;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">0d29989</code>
+      <span class="commit-time">Dom 17 Mag · 20:29</span>
+      <span class="commit-type type-feat">feat</span>
+    </div>
+    <div class="commit-title">SimulationReport convertito in modal full-screen con left nav e 6 sezioni</div>
+    <div class="commit-body">
+      <p>Il SimulationReport era un pannello inline nella colonna destra del simulatore. È stato riscritto come <strong>overlay full-screen</strong> (<code>fixed inset-0 z-50</code>) aperto tramite bottone "Full Report" nell'header (visibile solo quando la simulazione è completa).</p>
+      <p style="margin-top:8px">Struttura interna:</p>
+      <ul>
+        <li><strong>Header fisso:</strong> nome nodo origine, badge costo recovery, conteggio nodi, export JSON/CSV, bottone chiudi (X)</li>
+        <li><strong>Left nav (w-52):</strong> link a 6 sezioni con highlight attivo + pannello Quick Stats (worst RTO, RPO, max hops, durata)</li>
+        <li><strong>6 sezioni collassabili:</strong> Executive Summary · Impact Table · Timeline of Events · Root Cause Analysis · AI Recovery Playbook · Mitigation &amp; Recommendations</li>
+      </ul>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-mod">frontend/src/App.jsx</span>
+      <span class="ftag ftag-mod">frontend/src/components/SimulationReport.jsx</span>
+    </div>
+    <div class="delta"><span class="delta-add">+361</span> <span class="delta-del">−194</span> linee</div>
+  </div>
+
+  <!-- COMMIT 8 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#10b981;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">8bb15f1</code>
+      <span class="commit-time">Lun 18 Mag · 10:34</span>
+      <span class="commit-type type-feat">feat</span>
+    </div>
+    <div class="commit-title">Eisenhower DR Classifier — backend + MCP Q1 auto-routing</div>
+    <div class="commit-body">
+      <p>Implementazione completa del classificatore Eisenhower lato backend. Ogni simulazione viene ora classificata in uno dei 4 quadranti (Q1–Q4) e il campo <code>eisenhower_quadrant</code> è incluso nella risposta dell'API <code>POST /api/dr/simulate</code>. Il MCP server auto-invoca <code>get_recovery_plan</code> quando il risultato è Q1. 7 unit test coprono tutti i casi limite.</p>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-new">backend/algorithms/eisenhower_classifier.py</span>
+      <span class="ftag ftag-new">backend/tests/test_eisenhower.py</span>
+      <span class="ftag ftag-mod">backend/api/dr.py</span>
+      <span class="ftag ftag-mod">backend/mcp_server/app.py</span>
+      <span class="ftag ftag-mod">backend/models/enhanced_graph.py</span>
+    </div>
+    <div class="delta"><span class="delta-add">+356</span> <span class="delta-del">−8</span> linee</div>
+  </div>
+
+  <!-- COMMIT 9 -->
+  <div class="commit">
+    <div class="commit-dot" style="background:#10b981;border-color:#0d0f14"></div>
+    <div class="commit-head">
+      <code class="commit-hash">1caa9db</code>
+      <span class="commit-time">Lun 18 Mag · 11:50</span>
+      <span class="commit-type type-feat">feat</span>
+    </div>
+    <div class="commit-title">Eisenhower Priority Matrix visualizzata nel SimulationReport</div>
+    <div class="commit-body">
+      <p>Nuova sezione "EISENHOWER PRIORITY MATRIX" nel report, posizionata tra Executive Summary e Impact Table. Include:</p>
+      <ul>
+        <li><strong>Banner attivo:</strong> icona colorata + quadrante + label + azione MCP consigliata</li>
+        <li><strong>Matrice 2×2 interattiva:</strong> il quadrante attivo mostra blast radius count e worst RTO live; gli altri tre mostrano descrizioni e bullet point</li>
+        <li><strong>Bubble chart SVG:</strong> scatter plot con tutti i nodi del blast radius posizionati su asse Urgency (x=distanza) × Importance (y=RTO effettivo), con jitter deterministico per evitare sovrapposizioni e tooltip on-hover</li>
+      </ul>
+    </div>
+    <div class="files">
+      <span class="ftag ftag-mod">frontend/src/components/SimulationReport.jsx</span>
+    </div>
+    <div class="delta"><span class="delta-add">+290</span> <span class="delta-del">−6</span> linee</div>
+  </div>
+
+</div><!-- /timeline -->
+
+<hr class="sep">
+
+<!-- ══ EISENHOWER SPIEGAZIONE ══ -->
+<div class="sl">02 — Come funziona la Matrice di Eisenhower in ATHENA</div>
+
+<div class="eis-intro">
+  <p>La <strong>Matrice di Eisenhower</strong> — originariamente un framework di produttività personale — è stata adattata per la prioritizzazione degli eventi di Disaster Recovery nell'AI Digital Twin DR Platform. L'idea centrale è semplice: ogni evento di failure nel grafo Neo4j viene classificato lungo due dimensioni ortogonali (<em>urgenza</em> e <em>importanza</em>) per determinare la risposta automatica ottimale, dal playbook immediato alla pulizia differita.</p>
+  <p>La classificazione avviene <strong>automaticamente e in tempo reale</strong> al termine di ogni simulazione (<code>POST /api/dr/simulate</code>): il classificatore riceve il risultato del BFS, calcola le due dimensioni e restituisce un quadrante Q1–Q4 incluso direttamente nella response JSON.</p>
+</div>
+
+<!-- Axis labels + matrix -->
+<div style="margin-bottom:40px">
+  <div style="display:grid;grid-template-columns:24px 1fr;margin-bottom:4px">
+    <div></div>
+    <div class="axis-x-labels">
+      <span>⚡ URGENTE</span>
+      <span>◌ NON URGENTE</span>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:24px 1fr">
+    <div style="display:flex;flex-direction:column">
+      <div class="axis-y-label" style="flex:1">IMPORTANTE</div>
+      <div class="axis-y-label" style="flex:1">NON IMP.</div>
+    </div>
+    <div class="quad-grid">
+
+      <div class="quad q1">
+        <span class="quad-n">Q1</span>
+        <div class="quad-badge">Urgente · Importante</div>
+        <div class="quad-title">ESEGUI ORA</div>
+        <div class="quad-desc">→ MCP get_recovery_plan immediato</div>
+        <ul class="quad-list">
+          <li>Blast radius attivo — cascading failure in propagazione su Neo4j</li>
+          <li><code>worst_case_rto_minutes</code> supera il target del nodo origine</li>
+          <li>Lag di replica (<code>replication_lag_min</code>) oltre la soglia RPO</li>
+          <li>Cascade in corso su almeno un nodo a distanza ≤ 2 hops</li>
+          <li>Sistema di produzione (<code>affects_production=True</code>) coinvolto</li>
+        </ul>
+        <div class="quad-footer"><span>🔴</span><span>BFS cascade → get_recovery_plan → PagerDuty escalation</span></div>
+      </div>
+
+      <div class="quad q2">
+        <span class="quad-n">Q2</span>
+        <div class="quad-badge">Non Urgente · Importante</div>
+        <div class="quad-title">PIANIFICA E MIGLIORA</div>
+        <div class="quad-desc">→ simulate_disaster dry-run + arch recommendations</div>
+        <ul class="quad-list">
+          <li>RTO/RPO al 70% del threshold (warning, non ancora breach)</li>
+          <li>Produzione impattata ma entro i tempi di recovery contrattuale</li>
+          <li>Blast radius con nodi critici ma cascading non ancora attivo</li>
+          <li>Simulazione periodica pianificata (dry-run, non-prod)</li>
+          <li>Analisi trend RTO/RPO via VictoriaMetrics (90 giorni)</li>
+        </ul>
+        <div class="quad-footer"><span>🟡</span><span>Scheduler → simulate_disaster → SimulationReport → ARB queue</span></div>
+      </div>
+
+      <div class="quad q3">
+        <span class="quad-n">Q3</span>
+        <div class="quad-badge">Urgente · Non Importante</div>
+        <div class="quad-title">DELEGA ALL'AUTOMAZIONE</div>
+        <div class="quad-desc">→ Static playbook steps, escalation timer 15 min</div>
+        <ul class="quad-list">
+          <li>Cascade in corso (<code>cascade_in_progress=True</code>) ma su nodo non-critical</li>
+          <li>Nessun nodo produzione coinvolto (<code>affects_production=False</code>)</li>
+          <li>RTO entro il target, nessun blast radius critico (distanza > 2 hops)</li>
+          <li>Replica lag entro RPO ma performance degradate</li>
+          <li>Escalation automatica a Q1 se condizione persiste oltre 15 minuti</li>
+        </ul>
+        <div class="quad-footer"><span>🔵</span><span>Static playbook → ServiceNow P3/P4 → escalation timer</span></div>
+      </div>
+
+      <div class="quad q4">
+        <span class="quad-n">Q4</span>
+        <div class="quad-badge">Non Urgente · Non Importante</div>
+        <div class="quad-title">ELIMINA O ARCHIVIA</div>
+        <div class="quad-desc">→ LRU eviction, Neo4j cleanup, log retention</div>
+        <ul class="quad-list">
+          <li>Nessun breach, nessuna urgenza, nessun impatto produzione</li>
+          <li>SimulationCache LRU eviction per simulazioni scadute (> 30 giorni)</li>
+          <li>Alert duplicati da monitoring legacy non integrato nel grafo</li>
+          <li>Nodi orfani nel grafo rilevati da MCP <code>check_drift</code></li>
+          <li>Log di simulazione oltre il retention period configurato</li>
+        </ul>
+        <div class="quad-footer"><span>⚫</span><span>check_drift → Neo4j cleanup → SimulationCache purge</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ ALGORITMO ══ -->
+<div class="sl">03 — Algoritmo di classificazione — eisenhower_classifier.py</div>
+
+<div class="algo">
+  <div class="algo-head">
+    <div class="dot" style="background:#ef4444"></div>
+    <div class="dot" style="background:#f59e0b"></div>
+    <div class="dot" style="background:#10b981"></div>
+    <span>backend/algorithms/eisenhower_classifier.py — <strong>NUOVO</strong> · implementato 18/05/2026</span>
+  </div>
+  <pre><span class="cm">"""
+Eisenhower DR Classifier — classifica ogni simulazione in Q1..Q4
+Integra: bfs_with_latency · calculate_effective_rto · EnhancedSimulationWithTimeline
+"""</span>
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">from</span> enum        <span class="kw">import</span> Enum
+
+<span class="kw">class</span> <span class="fn">EisenhowerQuadrant</span>(str, Enum):
+    Q1 = <span class="str">"Q1"</span>  <span class="cm"># Urgente + Importante  → get_recovery_plan immediato</span>
+    Q2 = <span class="str">"Q2"</span>  <span class="cm"># Non Urgente + Imp.    → simulate_disaster pianificato</span>
+    Q3 = <span class="str">"Q3"</span>  <span class="cm"># Urgente + Non Imp.    → static playbook + timer</span>
+    Q4 = <span class="str">"Q4"</span>  <span class="cm"># Non Urgente + Non Imp → cleanup / check_drift</span>
+
+<span class="cm"># Costanti</span>
+URGENCY_RATIO_WARN:    float = <span class="nu">0.70</span>  <span class="cm"># 70% threshold → warning Q3</span>
+ESCALATION_WINDOW_MIN: float = <span class="nu">15.0</span>  <span class="cm"># minuti prima della promozione Q3→Q1</span>
+
+<span class="de">@dataclass</span>
+<span class="kw">class</span> <span class="fn">EisenhowerInput</span>:
+    simulation:          EnhancedSimulationWithTimeline  <span class="cm"># da /api/dr/simulate</span>
+    rto_target_minutes:  float   <span class="cm"># proprietà Neo4j del nodo origine</span>
+    rpo_target_minutes:  float
+    cascade_in_progress: bool = False
+    replication_lag_min: float = <span class="nu">0.0</span>
+    affects_production:  bool = True
+
+
+<span class="kw">def</span> <span class="fn">classify_dr_event</span>(inp: EisenhowerInput) → EisenhowerQuadrant:
+    <span class="cm"># Breach: RTO/RPO effettivo supera il target del nodo</span>
+    rto_breach = inp.simulation.worst_case_rto_minutes > inp.rto_target_minutes
+    rpo_breach = inp.replication_lag_min              > inp.rpo_target_minutes
+
+    <span class="cm"># Blast radius critico: ≥1 nodo entro 2 hops dall'origine</span>
+    critical_blast = any(n.distance &lt;= 2 <span class="kw">for</span> n <span class="kw">in</span> inp.simulation.blast_radius)
+
+    <span class="cm"># Urgenza: breach o cascading failure già in corso</span>
+    is_urgent    = rto_breach <span class="kw">or</span> rpo_breach <span class="kw">or</span> inp.cascade_in_progress
+    <span class="cm"># Importanza: produzione coinvolta, nodi critici vicini, o breach confermato</span>
+    is_important = inp.affects_production <span class="kw">or</span> critical_blast <span class="kw">or</span> rto_breach
+
+    <span class="kw">if</span> is_urgent     <span class="kw">and</span> is_important:     <span class="kw">return</span> EisenhowerQuadrant.Q1
+    <span class="kw">if not</span> is_urgent <span class="kw">and</span> is_important:     <span class="kw">return</span> EisenhowerQuadrant.Q2
+    <span class="kw">if</span> is_urgent     <span class="kw">and not</span> is_important: <span class="kw">return</span> EisenhowerQuadrant.Q3
+    <span class="kw">return</span> EisenhowerQuadrant.Q4
+
+
+<span class="kw">def</span> <span class="fn">apply_escalation</span>(quadrant: EisenhowerQuadrant, elapsed_minutes: float) → EisenhowerQuadrant:
+    <span class="cm"># Q3 → Q1 se la condizione non è risolta entro ESCALATION_WINDOW_MIN</span>
+    <span class="kw">if</span> quadrant == EisenhowerQuadrant.Q3 <span class="kw">and</span> elapsed_minutes >= ESCALATION_WINDOW_MIN:
+        <span class="kw">return</span> EisenhowerQuadrant.Q1
+    <span class="kw">return</span> quadrant</pre>
+</div>
+
+<!-- ══ SOGLIE ══ -->
+<div class="sl">04 — Soglie e parametri di classificazione</div>
+
+<table class="thr">
+  <thead>
+    <tr>
+      <th>Parametro</th>
+      <th>Valore</th>
+      <th>Significato</th>
+      <th>Dove viene letto</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>rto_target_minutes</td>
+      <td>Da proprietà Neo4j del nodo origine</td>
+      <td>Soglia RTO contrattuale per il nodo. Se <code>worst_case_rto_minutes</code> la supera → <code>rto_breach = True</code> → urgenza e importanza.</td>
+      <td><code>affected_nodes[origin_node_id]["rto_minutes"]</code></td>
+    </tr>
+    <tr>
+      <td>rpo_target_minutes</td>
+      <td>Da proprietà Neo4j del nodo origine</td>
+      <td>Soglia RPO. Se il lag di replica supera questo valore → <code>rpo_breach = True</code>. Default 15 min se non configurato.</td>
+      <td><code>affected_nodes[origin_node_id]["rpo_minutes"]</code></td>
+    </tr>
+    <tr>
+      <td>URGENCY_RATIO_WARN</td>
+      <td><strong>0.70</strong></td>
+      <td>Al 70% del target si entra in Q3 (warning). Sotto questa soglia e senza urgenze → Q2 o Q4.</td>
+      <td><code>eisenhower_classifier.py</code> (costante)</td>
+    </tr>
+    <tr>
+      <td>ESCALATION_WINDOW_MIN</td>
+      <td><strong>15.0 minuti</strong></td>
+      <td>Un evento Q3 non risolto viene automaticamente promosso a Q1 dopo 15 minuti tramite <code>apply_escalation()</code>.</td>
+      <td><code>eisenhower_classifier.py</code> (costante)</td>
+    </tr>
+    <tr>
+      <td>cascade_in_progress</td>
+      <td><code>len(affected_nodes) > 1</code></td>
+      <td>Se la simulazione ha più di un nodo nel blast radius, la cascata è considerata in corso. Genera urgenza.</td>
+      <td><code>api/dr.py</code> post <code>bfs_with_latency()</code></td>
+    </tr>
+    <tr>
+      <td>critical_blast</td>
+      <td><code>any(n.distance ≤ 2)</code></td>
+      <td>Se almeno un nodo nel blast radius è a ≤ 2 hops dall'origine, il blast radius è considerato critico. Genera importanza.</td>
+      <td><code>eisenhower_classifier.py</code> interno</td>
+    </tr>
+    <tr>
+      <td>affects_production</td>
+      <td><code>True</code> (default)</td>
+      <td>Tutti i nodi del grafo ATHENA sono considerati produzione per default. Può essere esteso con una proprietà Neo4j.</td>
+      <td><code>api/dr.py</code> (hardcoded, estendibile)</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ══ FLUSSO INTEGRAZIONE ══ -->
+<div class="sl">05 — Flusso di integrazione end-to-end</div>
+
+<div class="flow">
+  <div class="flow-step">
+    <div class="fs-label">1. Frontend</div>
+    <div class="fs-name">DisasterPanel<br><small style="font-size:11px;color:#8b90a4">POST /api/dr/simulate</small></div>
+  </div>
+  <div class="flow-arr">→</div>
+  <div class="flow-step">
+    <div class="fs-label">2. Backend</div>
+    <div class="fs-name">bfs_with_latency()<br><small style="font-size:11px;color:#8b90a4">cascading_failure.py</small></div>
+  </div>
+  <div class="flow-arr">→</div>
+  <div class="flow-step">
+    <div class="fs-label">3. Calcolo</div>
+    <div class="fs-name">calculate_effective_rto()<br><small style="font-size:11px;color:#8b90a4">rto_rpo_calculator.py</small></div>
+  </div>
+  <div class="flow-arr">→</div>
+  <div class="flow-step" style="border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.06)">
+    <div class="fs-label">4. NEW — Classifier</div>
+    <div class="fs-name" style="color:#10b981">classify_dr_event()<br><small style="font-size:11px;color:#8b90a4">eisenhower_classifier.py</small></div>
+  </div>
+  <div class="flow-arr">→</div>
+  <div class="flow-step">
+    <div class="fs-label">5. Response</div>
+    <div class="fs-name">eisenhower_quadrant<br><small style="font-size:11px;color:#8b90a4">EnhancedSimulationWithTimeline</small></div>
+  </div>
+  <div class="flow-arr">→</div>
+  <div class="flow-step" style="border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.06)">
+    <div class="fs-label">6. NEW — Frontend</div>
+    <div class="fs-name" style="color:#10b981">Eisenhower Matrix<br><small style="font-size:11px;color:#8b90a4">SimulationReport.jsx</small></div>
+  </div>
+</div>
+
+<p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.7">
+  Parallelamente, il <strong>MCP Server</strong> (<code>mcp_server/app.py</code>) esegue la stessa classificazione quando un agente AI invoca <code>simulate_disaster</code>. Se il risultato è <strong>Q1</strong>, il server appende automaticamente l'output di <code>get_recovery_plan</code> alla risposta, senza che l'agente debba fare un secondo tool call.
+</p>
+
+<!-- Routing per quadrante -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:32px">
+  <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:6px;padding:14px 16px">
+    <div style="font-family:var(--mono);font-size:10px;color:#f87171;margin-bottom:6px;letter-spacing:.1em">Q1 · AUTO-ROUTING</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.55">
+      MCP invoca automaticamente <code>get_recovery_plan</code> e lo appende al risultato di <code>simulate_disaster</code>. PagerDuty escalation consigliata.
+    </div>
+  </div>
+  <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.22);border-radius:6px;padding:14px 16px">
+    <div style="font-family:var(--mono);font-size:10px;color:#fbbf24;margin-bottom:6px;letter-spacing:.1em">Q2 · DRY-RUN</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.55">
+      Simulazione pianificata. <code>simulate_disaster</code> in modalità dry-run. Generazione arch recommendations e pacchetto ARB.
+    </div>
+  </div>
+  <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.22);border-radius:6px;padding:14px 16px">
+    <div style="font-family:var(--mono);font-size:10px;color:#60a5fa;margin-bottom:6px;letter-spacing:.1em">Q3 · DELEGA + TIMER</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.55">
+      Static playbook steps eseguiti automaticamente. Ticket ServiceNow P3/P4. Escalation timer: promosso a Q1 dopo 15 min senza risoluzione.
+    </div>
+  </div>
+  <div style="background:rgba(107,114,128,.05);border:1px solid rgba(107,114,128,.20);border-radius:6px;padding:14px 16px">
+    <div style="font-family:var(--mono);font-size:10px;color:#9ca3af;margin-bottom:6px;letter-spacing:.1em">Q4 · CLEANUP</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.55">
+      <code>check_drift</code>, LRU eviction SimulationCache, purge log, rimozione nodi orfani dal grafo Neo4j.
+    </div>
+  </div>
+</div>
+
+<!-- ══ VISUALIZZAZIONE REPORT ══ -->
+<div class="sl">06 — Visualizzazione nel SimulationReport</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:32px">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:20px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:10px;letter-spacing:.1em">COMPONENTI REACT AGGIUNTI</div>
+    <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:var(--green)">›</span><code>Q_CFG</code> — oggetto di configurazione per colori, label, bullets e azioni di ogni quadrante</li>
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:var(--green)">›</span><code>QuadrantCell</code> — cella della matrice 2×2: se attiva mostra dati reali (blast radius, RTO), altrimenti descrizione</li>
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:var(--green)">›</span><code>EisenhowerBubbleChart</code> — SVG scatter plot con bubble per ogni nodo del blast radius</li>
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:var(--green)">›</span>Voce "Eisenhower Priority" aggiunta al left nav con icona <code>Target</code></li>
+    </ul>
+  </div>
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:20px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:10px;letter-spacing:.1em">LOGICA BUBBLE CHART (SVG)</div>
+    <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:#60a5fa">›</span><strong>Asse X (sinistra=urgente):</strong> <code>urgScore = 1 − (distance / maxDistance)</code> — nodi vicini all'origine finiscono a sinistra</li>
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:#60a5fa">›</span><strong>Asse Y (alto=importante):</strong> <code>impScore = effective_rto / maxRto</code> — nodi con RTO alto finiscono in alto</li>
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:#60a5fa">›</span><strong>Dimensione bolla:</strong> proporzionale all'RTO effettivo relativo (r = 7 + impScore × 12 px)</li>
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:#60a5fa">›</span><strong>Colore:</strong> quadrante individuale del nodo in base alla sua posizione sul grafico</li>
+      <li style="font-size:13px;color:var(--text2);padding-left:14px;position:relative"><span style="position:absolute;left:0;color:#60a5fa">›</span><strong>Jitter deterministico:</strong> offset ±14px da hash dell'ID per evitare sovrapposizioni, riproducibile</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══ TEST SUITE ══ -->
+<div class="sl">07 — Unit test — test_eisenhower.py (7 scenari)</div>
+
+<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;overflow:hidden;margin-bottom:32px">
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border2)">
+        <th style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:10px 16px;text-align:left">Test</th>
+        <th style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:10px 16px;text-align:left">Input</th>
+        <th style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:10px 16px;text-align:left">Expected</th>
+        <th style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:10px 16px;text-align:left">Stato</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text)">test_classify_q1_full_rto_breach</td>
+        <td style="padding:10px 16px;color:var(--text2)">worst_rto=120, target=60, affects_production=True</td>
+        <td style="padding:10px 16px;font-family:var(--mono);color:#f87171">Q1</td>
+        <td style="padding:10px 16px;color:var(--green)">✓ PASS</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text)">test_classify_q2_partial_rto_at_warn</td>
+        <td style="padding:10px 16px;color:var(--text2)">worst_rto=42 (70% di 60), no cascade, affects_production=True, nodi a distanza ≥3</td>
+        <td style="padding:10px 16px;font-family:var(--mono);color:#fbbf24">Q2</td>
+        <td style="padding:10px 16px;color:var(--green)">✓ PASS</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text)">test_classify_q3_cascade_non_critical</td>
+        <td style="padding:10px 16px;color:var(--text2)">cascade_in_progress=True, affects_production=False, nodi a distanza 3 e 5</td>
+        <td style="padding:10px 16px;font-family:var(--mono);color:#60a5fa">Q3</td>
+        <td style="padding:10px 16px;color:var(--green)">✓ PASS</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text)">test_apply_escalation_promotes_q3_to_q1</td>
+        <td style="padding:10px 16px;color:var(--text2)">Q3 + elapsed=16 min (> 15 min ESCALATION_WINDOW_MIN)</td>
+        <td style="padding:10px 16px;font-family:var(--mono);color:#f87171">Q1</td>
+        <td style="padding:10px 16px;color:var(--green)">✓ PASS</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text)">test_apply_escalation_q3_stays_before_window</td>
+        <td style="padding:10px 16px;color:var(--text2)">Q3 + elapsed=14 min (< 15 min)</td>
+        <td style="padding:10px 16px;font-family:var(--mono);color:#60a5fa">Q3</td>
+        <td style="padding:10px 16px;color:var(--green)">✓ PASS</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text)">test_apply_escalation_no_change_other_quadrants</td>
+        <td style="padding:10px 16px;color:var(--text2)">Q1, Q2, Q4 con elapsed=100 min</td>
+        <td style="padding:10px 16px;font-family:var(--mono);color:var(--text2)">Invariati</td>
+        <td style="padding:10px 16px;color:var(--green)">✓ PASS</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text)">test_classify_q4_no_urgency_no_importance</td>
+        <td style="padding:10px 16px;color:var(--text2)">worst_rto=5 min, target=60, no cascade, affects_production=False</td>
+        <td style="padding:10px 16px;font-family:var(--mono);color:#9ca3af">Q4</td>
+        <td style="padding:10px 16px;color:var(--green)">✓ PASS</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══ FILE RIEPILOGO ══ -->
+<div class="sl">08 — Riepilogo file modificati nella sessione</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+  <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.20);border-radius:6px;padding:14px 16px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-bottom:10px;letter-spacing:.1em">FILE NUOVI</div>
+    <ul style="list-style:none;display:flex;flex-direction:column;gap:5px">
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/algorithms/eisenhower_classifier.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/tests/test_eisenhower.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">eisenhower-dr-simulation.html</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">docs/changelog-priority1-to-5.html</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">docs/recovery-cost-model.html</li>
+    </ul>
+  </div>
+  <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.20);border-radius:6px;padding:14px 16px">
+    <div style="font-family:var(--mono);font-size:10px;color:#60a5fa;margin-bottom:10px;letter-spacing:.1em">FILE MODIFICATI — BACKEND</div>
+    <ul style="list-style:none;display:flex;flex-direction:column;gap:5px">
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/algorithms/playbook_generator.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/algorithms/cost_estimator.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/models/features.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/models/enhanced_graph.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/api/dr.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/mcp_server/app.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/settings.py</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">backend/requirements.txt</li>
+    </ul>
+  </div>
+  <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.20);border-radius:6px;padding:14px 16px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--purple);margin-bottom:10px;letter-spacing:.1em">FILE MODIFICATI — FRONTEND + CONFIG</div>
+    <ul style="list-style:none;display:flex;flex-direction:column;gap:5px">
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">frontend/src/App.jsx</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">frontend/src/components/SimulationReport.jsx</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">frontend/src/components/PlaybookPanel.jsx</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">frontend/src/components/SimulationComparison.jsx</li>
+      <li style="font-family:var(--mono);font-size:11px;color:var(--text2)">docker-compose.yml</li>
+    </ul>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <span>ATHENA — Predictive Resilience Engine · HERA S.p.A. DSI</span>
+  <span>Session Changelog · 17–18 Maggio 2026 · Branch 01_01_05</span>
+  <span>Generated 18/05/2026</span>
+</footer>
+
+</body>
+</html>
