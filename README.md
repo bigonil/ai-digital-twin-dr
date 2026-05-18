@@ -57,6 +57,7 @@
 | `frontend`       | node:20-alpine (Vite → Nginx)              | **3001**       | React 3D dashboard               |
 | `backend`        | python:3.12-slim (FastAPI + MCP)           | **8001**, 9001 | REST API + MCP server            |
 | `neo4j`          | neo4j:5.18-community                       | **7474**, 7687 | Graph DB — infra topology        |
+| `redis`          | redis:7-alpine                             | **6379**       | Simulation result cache          |
 | `victoriametrics`| victoriametrics/victoria-metrics:v1.101.0 | **8428**       | Time-series metrics              |
 | `qdrant`         | qdrant/qdrant:v1.9.2                       | **6333**, 6334 | Vector DB — semantic search      |
 | `vmagent`        | victoriametrics/vmagent:v1.101.0           | 8429           | Prometheus scrape agent          |
@@ -71,8 +72,9 @@
 | qdrant           | 1.5 GB  |
 | backend          | 1 GB    |
 | frontend         | 512 MB  |
+| redis            | 256 MB  |
 | vmagent          | 256 MB  |
-| **Total**        | **~7 GB** |
+| **Total**        | **~7.3 GB** |
 
 ---
 
@@ -253,11 +255,13 @@ The platform visualizes cascading failures in **real-time** with an integrated 3
 - **Auto-pause**: Playback automatically pauses at simulation end
 
 **Post-Simulation Report** (appears when playback completes)
-- **Executive Summary**: Origin node, failure mode, affected count, max hops, worst RTO/RPO
-- **Impact Table**: Sortable table showing all affected nodes with distance, type, RTO/RPO
+- **Executive Summary**: Origin node, failure mode, affected count, max hops, worst RTO/RPO, cost
+- **Eisenhower Matrix**: Interactive 2×2 quadrant view + SVG bubble chart (one bubble per affected node)
+- **Impact Table**: Sortable table showing all affected nodes with distance, type, effective RTO/RPO, recovery cost
 - **Timeline of Events**: Chronological list of node failures with millisecond precision
 - **Root Cause Analysis**: Auto-generated failure description based on node type
 - **Mitigation Actions**: Recovery steps + architecture-specific recommendations + best practices
+- **LLM Playbook**: Claude-powered step-by-step recovery runbook (falls back to static template if API unavailable)
 - **Collapsible Sections**: Each report section can be expanded/collapsed for focused analysis
 
 ### Usage Workflow
@@ -316,7 +320,10 @@ The `/api/dr/simulate` endpoint returns:
   "max_distance": 3,
   "total_duration_ms": 5000,
   "worst_case_rto_minutes": 15,
-  "worst_case_rpo_minutes": 2
+  "worst_case_rpo_minutes": 2,
+  "eisenhower_quadrant": "Q1",
+  "total_recovery_cost_usd": 4320.50,
+  "model_version": "1.0-accurate"
 }
 ```
 
@@ -354,6 +361,64 @@ Beyond the core DR Simulator, the platform includes 4 dedicated features for com
 
 ---
 
+## 🎯 Eisenhower DR Classifier
+
+Every simulation result is automatically classified into one of four **Eisenhower quadrants** to drive the correct response urgency:
+
+```
+                    IMPORTANT
+                        │
+          Q2            │            Q1
+     Plan & schedule    │      Act immediately
+     (not urgent,       │      (urgent + important)
+      important)        │
+  ──────────────────────┼────────────────────────── URGENT
+     Q4                 │            Q3
+     Defer / ignore     │      Delegate / monitor
+     (not urgent,       │      (urgent, not important)
+      not important)    │
+                        │
+                   NOT IMPORTANT
+```
+
+### Classification Logic (`algorithms/eisenhower_classifier.py`)
+
+| Signal | Threshold | Contribution |
+|--------|-----------|--------------|
+| `worst_case_rto_minutes > rto_target` | configurable (default 60 min) | **Urgent** |
+| `replication_lag_min > rpo_target` | configurable (default 15 min) | **Urgent** |
+| `cascade_in_progress` | `len(blast_radius) > 1` | **Urgent** |
+| `affects_production` | always `True` in API | **Important** |
+| `critical_blast` | any node at distance ≤ 2 | **Important** |
+| RTO breach (above) | same as urgency | **Important** |
+
+### Escalation Timer
+
+Q3 events (urgent but not important) auto-escalate to Q1 after **15 minutes** (`ESCALATION_WINDOW_MIN`) without resolution, via `apply_escalation(quadrant, elapsed_minutes)`.
+
+### Q1 Auto-Routing in MCP
+
+When `simulate_disaster` classifies an event as **Q1**, the MCP server immediately appends a full recovery plan (`get_recovery_plan`) to the response — no second tool call needed by the agent.
+
+### Frontend Visualization
+
+The **Simulation Report** includes two Eisenhower visualizations:
+- **2×2 Matrix**: The four quadrants with the active quadrant highlighted, showing live blast radius count, worst-case RTO, and contextual action bullets.
+- **Bubble Chart**: Each affected node plotted on Urgency (x-axis, based on distance) × Importance (y-axis, based on effective RTO). Bubble radius scales with importance; color follows the node's individual quadrant.
+
+### API Response Field
+
+```json
+{
+  "eisenhower_quadrant": "Q1",
+  "worst_case_rto_minutes": 120,
+  "worst_case_rpo_minutes": 5,
+  ...
+}
+```
+
+---
+
 ## 🤖 MCP Server Integration
 
 The platform exposes a [Model Context Protocol](https://modelcontextprotocol.io) server so AI agents (Claude Code, GitHub Copilot) can query and manipulate the graph directly.
@@ -362,10 +427,10 @@ The platform exposes a [Model Context Protocol](https://modelcontextprotocol.io)
 
 | Tool | Description |
 |------|-------------|
-| `simulate_disaster(node_id, depth)` | Recursive impact analysis — returns timeline with step_time_ms for each affected node |
+| `simulate_disaster(node_id, depth)` | Recursive impact analysis — returns timeline with step_time_ms, Eisenhower quadrant; auto-routes Q1 to recovery plan |
 | `get_recovery_plan(target)` | Queries Neo4j + Qdrant to produce a step-by-step DR playbook |
 | `check_drift()` | Compares Terraform state files vs. current Neo4j graph |
-| `get_simulation_timeline(simulation_id, query_at_time_ms)` | Query cached simulation — returns nodes active at time T (milliseconds) |
+| `get_simulation_timeline(simulation_id, query_at_time_ms)` | Query Redis-cached simulation — returns nodes active at time T (milliseconds) |
 | `analyze_cascading_failure(simulation_id, time_ms)` | RTO/RPO metrics and affected node count at a specific point in the cascade |
 
 ### Timeline-Aware Simulation
@@ -437,22 +502,45 @@ ai-digital-twin-dr/
 ├── backend/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py                 # FastAPI entry point
-│   ├── settings.py             # Pydantic settings
+│   ├── main.py                 # FastAPI entry point + global error handler
+│   ├── settings.py             # Pydantic settings (Redis, rate limits, Claude API)
+│   ├── observability.py        # Prometheus metrics (simulation_latency, affected_nodes_histogram)
 │   ├── api/                    # REST endpoints
+│   │   ├── dependencies.py     # Rate limiting, optional API key auth
 │   │   ├── graph.py            # Graph CRUD
 │   │   ├── metrics.py          # VictoriaMetrics proxy
-│   │   └── dr.py               # DR simulation endpoints
+│   │   ├── dr.py               # DR simulate / reset / drift / playbook
+│   │   ├── compliance.py       # SLA compliance audit
+│   │   ├── whatif.py           # What-if analysis
+│   │   └── chaos.py            # Chaos engineering experiments
+│   ├── algorithms/             # Core DR intelligence
+│   │   ├── eisenhower_classifier.py  # Urgency×Importance quadrant + escalation timer
+│   │   ├── cascading_failure.py      # BFS with latency accumulation
+│   │   ├── rto_rpo_calculator.py     # Effective RTO/RPO + monitoring state impact
+│   │   ├── cost_estimator.py         # Hourly + recovery cost by node type/region
+│   │   ├── playbook_generator.py     # Claude API LLM playbook (fallback: static)
+│   │   └── region_latency.py         # Cross-region latency matrix
 │   ├── db/                     # Database clients
-│   │   ├── neo4j_client.py
+│   │   ├── neo4j_client.py     # Neo4j Bolt client + indices (type, region, status, recovery_strategy, monitoring_state)
+│   │   ├── simulation_cache.py # Redis/memory simulation cache (TTL-based)
 │   │   ├── victoriametrics_client.py
 │   │   └── qdrant_client.py
+│   ├── models/                 # Pydantic schemas
+│   │   ├── graph.py            # AffectedNode, DisasterSimulationResult
+│   │   ├── enhanced_graph.py   # EnhancedAffectedNode, EnhancedSimulationWithTimeline (with eisenhower_quadrant)
+│   │   ├── features.py         # RecoveryPlaybook, compliance, chaos, postmortem
+│   │   └── errors.py           # Unified ErrorResponse schema
 │   ├── parsers/                # 4-phase ingestion
 │   │   ├── infra.py            # Phase 1: Terraform → Neo4j
 │   │   ├── code.py             # Phase 2: AST → function links
-│   │   └── docs.py             # Phase 3: Markdown → Qdrant
-│   └── mcp/
-│       └── server.py           # MCP tool server
+│   │   └── docs.py             # Phase 3: Markdown → Qdrant (with embedding cache)
+│   ├── tests/                  # pytest test suite (~90 tests)
+│   │   ├── test_eisenhower.py
+│   │   ├── test_enhanced_simulation.py
+│   │   ├── test_timeline_simulation.py
+│   │   └── ...
+│   └── mcp_server/
+│       └── app.py              # MCP tool server (simulate_disaster, get_recovery_plan, check_drift, timeline tools)
 ├── frontend/
 │   ├── Dockerfile
 │   ├── package.json
@@ -468,12 +556,18 @@ ai-digital-twin-dr/
 │       ├── utils/
 │       │   └── mapLayout.js             # Tiered layout algorithm for node positioning
 │       └── components/
-│           ├── TopologyViewer.jsx       # Left panel: Infrastructure node browser
-│           ├── InfrastructureMap.jsx    # Center panel: 2D tiered visualization + animations
-│           ├── MetricsDashboard.jsx     # Right panel: Per-node observability metrics + sparklines
+│           ├── TopologyViewer.jsx       # Left panel: Infrastructure node browser (React.memo)
+│           ├── InfrastructureMap.jsx    # Center panel: 2D tiered visualization + animations (React.memo)
+│           ├── MetricsDashboard.jsx     # Right panel: Per-node observability metrics + sparklines (React.memo)
 │           ├── DisasterPanel.jsx        # Controls: Depth input + Simulate/Reset buttons
 │           ├── SimulationTimeline.jsx   # Timeline playback: play/pause/speed/progress
-│           └── SimulationReport.jsx     # 5-section post-simulation report (accordion)
+│           ├── SimulationReport.jsx     # 7-section report: summary, Eisenhower matrix+chart, impact table, timeline, RCA, mitigation, playbook
+│           ├── ComplianceDashboard.jsx  # SLA compliance audit UI
+│           ├── ArchitecturePlanner.jsx  # What-if analysis UI
+│           ├── ChaosDashboard.jsx       # Chaos engineering UI
+│           ├── PostmortemView.jsx       # Postmortem analysis UI
+│           ├── PlaybookPanel.jsx        # LLM recovery playbook viewer
+│           └── SimulationComparison.jsx # Baseline vs. proposed topology comparison
 ├── data/
 │   ├── terraform/sample/       # Sample Terraform files for ingestion
 │   └── docs/                   # Sample architecture docs
@@ -496,11 +590,16 @@ Copy `.env.example` to `.env` and adjust as needed:
 | `NEO4J_PASSWORD` | `changeme_neo4j` | Neo4j admin password |
 | `VICTORIAMETRICS_URL` | `http://victoriametrics:8428` | VM query endpoint |
 | `QDRANT_HOST` | `qdrant` | Qdrant service hostname |
+| `REDIS_URL` | `redis://redis:6379` | Redis URL for simulation cache |
+| `SIMULATION_CACHE_TTL_SECONDS` | `3600` | Simulation cache TTL (1 hour) |
 | `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Ollama on host machine |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model name |
 | `VITE_API_URL` | `http://localhost:8001` | API URL for browser → backend calls |
 | `DR_RTO_SECONDS` | `300` | Recovery Time Objective threshold |
 | `DR_RPO_SECONDS` | `60` | Recovery Point Objective threshold |
+| `API_SECRET_KEY` | _(unset)_ | Optional API key for endpoint auth — if unset, auth is disabled |
+| `ANTHROPIC_API_KEY` | _(unset)_ | Claude API key for LLM-powered playbook generation |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Global request rate limit per IP |
 
 ---
 
@@ -549,6 +648,16 @@ docker compose down
 # Stop and remove all volumes (destructive — wipes graph + metrics + vectors)
 docker compose down -v
 ```
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [FEATURES.md](./docs/FEATURES.md) | Detailed workflows for Compliance, What-If, Chaos, Postmortem |
+| [changelog-session-2026-05-17-18.html](./docs/changelog-session-2026-05-17-18.html) | Full session changelog (17–18 May 2026) with Eisenhower algorithm explanation |
+| [eisenhower-dr-simulation.html](./docs/eisenhower-dr-simulation.html) | Eisenhower DR classifier design specification |
 
 ---
 
