@@ -5,7 +5,7 @@ import React, { useState, useMemo, useRef, memo } from 'react'
 import {
   X, Download, ChevronDown, FileJson, FileText,
   Zap, Network, Clock, Search, BookOpen, Shield,
-  AlertTriangle, Activity, TrendingDown,
+  AlertTriangle, Activity, TrendingDown, Target,
 } from 'lucide-react'
 import PlaybookPanel from './PlaybookPanel.jsx'
 
@@ -95,9 +95,218 @@ function getRecommendations(type) {
   return ARCH_RECS[type] || ARCH_RECS._default
 }
 
+/* ── Eisenhower quadrant config ──────────────────────────────── */
+const Q_CFG = {
+  Q1: {
+    label: 'ESEGUI ORA', sublabel: 'Urgente · Importante',
+    cls: 'text-red-400', bgCls: 'bg-red-950/25', borderCls: 'border-red-900/50',
+    ringColor: '#ef4444',
+    svgFillNorm: 'rgba(239,68,68,0.20)', svgFillHov: 'rgba(239,68,68,0.38)',
+    svgQFill: 'rgba(239,68,68,0.07)', svgStroke: '#ef4444', svgText: '#fca5a5',
+    icon: '🔴', action: 'BFS cascade → MCP get_recovery_plan → PagerDuty',
+    bullets: [
+      'Blast radius attivo — cascading failure in propagazione (BFS su Neo4j)',
+      'RTO breach confermato da rto_rpo_calculator.py su nodo critico',
+      'Failover DB primario non completato entro SLA contrattuale',
+    ],
+  },
+  Q2: {
+    label: 'PIANIFICA E MIGLIORA', sublabel: 'Non Urgente · Importante',
+    cls: 'text-yellow-400', bgCls: 'bg-yellow-950/20', borderCls: 'border-yellow-900/40',
+    ringColor: '#f59e0b',
+    svgFillNorm: 'rgba(245,158,11,0.18)', svgFillHov: 'rgba(245,158,11,0.32)',
+    svgQFill: 'rgba(245,158,11,0.06)', svgStroke: '#f59e0b', svgText: '#fcd34d',
+    icon: '🟡', action: 'simulate_disaster dry-run + arch recommendations → ARB',
+    bullets: [
+      'Simulazione DR periodica (dry-run, non-prod, depth configurabile)',
+      'Analisi trend RTO/RPO sliding window 90 giorni via VictoriaMetrics',
+      'Design chaos engineering scenari worst-case via /api/chaos',
+    ],
+  },
+  Q3: {
+    label: "DELEGA ALL'AUTOMAZIONE", sublabel: 'Urgente · Non Importante',
+    cls: 'text-blue-400', bgCls: 'bg-blue-950/20', borderCls: 'border-blue-900/40',
+    ringColor: '#3b82f6',
+    svgFillNorm: 'rgba(59,130,246,0.18)', svgFillHov: 'rgba(59,130,246,0.32)',
+    svgQFill: 'rgba(59,130,246,0.06)', svgStroke: '#3b82f6', svgText: '#93c5fd',
+    icon: '🔵', action: 'Static playbook → ServiceNow P3/P4 → escalation 15 min',
+    bullets: [
+      'Performance warning entro SLA (70% threshold — URGENCY_RATIO_WARN)',
+      'Replica lag su nodo secondario — auto-sync via replica_fallback',
+      'Escalation automatica → Q1 se condizione persiste oltre 15 min',
+    ],
+  },
+  Q4: {
+    label: 'ELIMINA O ARCHIVIA', sublabel: 'Non Urgente · Non Importante',
+    cls: 'text-gray-400', bgCls: 'bg-gray-800/20', borderCls: 'border-gray-700/40',
+    ringColor: '#6b7280',
+    svgFillNorm: 'rgba(107,114,128,0.15)', svgFillHov: 'rgba(107,114,128,0.28)',
+    svgQFill: 'rgba(107,114,128,0.05)', svgStroke: '#6b7280', svgText: '#d1d5db',
+    icon: '⚫', action: 'check_drift → Neo4j cleanup → SimulationCache purge',
+    bullets: [
+      'SimulationCache LRU eviction — simulazioni scadute (> 30 giorni)',
+      'Alert duplicati da monitoring legacy non integrato nel grafo',
+      'Nodi orfani nel grafo — rilevati da MCP check_drift (no DEPENDS_ON)',
+    ],
+  },
+}
+
+/* ── 2×2 quadrant cell ───────────────────────────────────────── */
+function QuadrantCell({ qk, isActive, sim, blast }) {
+  const c = Q_CFG[qk]
+  return (
+    <div
+      className={`relative p-4 min-h-44 transition-all ${
+        isActive
+          ? `${c.bgCls} border-2`
+          : 'bg-dt-bg/30 border border-dt-border/30 opacity-50 hover:opacity-65'
+      }`}
+      style={isActive ? { borderColor: c.ringColor } : {}}
+    >
+      <span className="absolute top-3 right-3 text-xs font-mono text-gray-700">{qk}</span>
+      <div className={`text-xs font-mono font-bold ${c.cls} mb-0.5 pr-6`}>{c.label}</div>
+      <div className="text-xs text-gray-500 font-mono mb-3">{c.sublabel}</div>
+
+      {isActive && sim ? (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div className={`${c.bgCls} border ${c.borderCls} rounded p-2`}>
+              <div className="text-xs text-gray-500 font-mono">Blast Radius</div>
+              <div className={`text-2xl font-bold font-mono ${c.cls} leading-none my-1`}>{blast.length}</div>
+              <div className="text-xs text-gray-600">nodes affected</div>
+            </div>
+            <div className={`${c.bgCls} border ${c.borderCls} rounded p-2`}>
+              <div className="text-xs text-gray-500 font-mono">Worst RTO</div>
+              <div className={`text-2xl font-bold font-mono ${c.cls} leading-none my-1`}>{sim.worst_case_rto_minutes ?? '—'}</div>
+              <div className="text-xs text-gray-600">minutes</div>
+            </div>
+          </div>
+          <div className={`text-xs font-mono ${c.cls} border ${c.borderCls} rounded px-2 py-1.5 leading-relaxed`}>
+            {c.icon} {c.action}
+          </div>
+        </div>
+      ) : (
+        <>
+          <ul className="space-y-1.5 mb-8">
+            {c.bullets.map((b, i) => (
+              <li key={i} className="flex gap-1.5 text-xs text-gray-600">
+                <span className={`${c.cls} flex-shrink-0 opacity-50`}>›</span>
+                <span className="leading-snug">{b}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="absolute bottom-3 left-4 right-4 text-xs font-mono text-gray-700 truncate">
+            {c.icon} {c.action}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/* ── Bubble chart (SVG) ──────────────────────────────────────── */
+function EisenhowerBubbleChart({ blast, simulationResult }) {
+  const [hovered, setHovered] = useState(null)
+
+  const W = 680, H = 295
+  const LP = 44, TP = 20, RP = 8, BP = 28
+  const IW = W - LP - RP
+  const IH = H - TP - BP
+  const xMid = LP + IW / 2
+  const yMid = TP + IH / 2
+
+  const maxDist = Math.max(simulationResult.max_distance || 0, 1)
+  const maxRto  = Math.max(...blast.map(n => n.effective_rto_minutes || 0), 1)
+
+  const plotNodes = useMemo(() => blast.map(n => {
+    const urgScore = 1 - (n.distance / maxDist)
+    const impScore = (n.effective_rto_minutes || n.estimated_rto_minutes || 0) / maxRto
+    // deterministic jitter to spread overlapping nodes
+    const h = n.id.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0)
+    const jx = (Math.abs(h) % 28) - 14
+    const jy = (Math.abs(h >> 5) % 20) - 10
+    const x = Math.max(LP + 18, Math.min(W - RP - 18, LP + (1 - urgScore) * IW + jx))
+    const y = Math.max(TP + 18, Math.min(H - BP - 18, TP + (1 - impScore) * IH + jy))
+    const r = 7 + Math.round(impScore * 12)
+    const q = x < xMid ? (y < yMid ? 'Q1' : 'Q3') : (y < yMid ? 'Q2' : 'Q4')
+    return { ...n, x, y, r, q }
+  }), [blast, maxDist, maxRto])
+
+  return (
+    <div className="relative bg-dt-bg rounded-lg border border-dt-border overflow-hidden">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" xmlns="http://www.w3.org/2000/svg">
+        {/* Quadrant fills */}
+        <rect x={LP}   y={TP}   width={IW/2} height={IH/2} fill={Q_CFG.Q1.svgQFill} rx="2" />
+        <rect x={xMid} y={TP}   width={IW/2} height={IH/2} fill={Q_CFG.Q2.svgQFill} rx="2" />
+        <rect x={LP}   y={yMid} width={IW/2} height={IH/2} fill={Q_CFG.Q3.svgQFill} rx="2" />
+        <rect x={xMid} y={yMid} width={IW/2} height={IH/2} fill={Q_CFG.Q4.svgQFill} rx="2" />
+        {/* Axis dividers */}
+        <line x1={xMid} y1={TP}   x2={xMid} y2={H-BP}  stroke="rgba(255,255,255,0.09)" strokeWidth="1" strokeDasharray="5,4"/>
+        <line x1={LP}   y1={yMid} x2={W-RP}  y2={yMid}  stroke="rgba(255,255,255,0.09)" strokeWidth="1" strokeDasharray="5,4"/>
+        {/* Quadrant labels */}
+        <text x={LP+7}   y={TP+12}   fontSize="7.5" fill="rgba(239,68,68,0.50)"   fontFamily="monospace" letterSpacing="0.08em">Q1 · URGENTE + IMPORTANTE</text>
+        <text x={xMid+7} y={TP+12}   fontSize="7.5" fill="rgba(245,158,11,0.50)"  fontFamily="monospace" letterSpacing="0.08em">Q2 · NON URGENTE + IMPORTANTE</text>
+        <text x={LP+7}   y={yMid+12} fontSize="7.5" fill="rgba(59,130,246,0.50)"  fontFamily="monospace" letterSpacing="0.08em">Q3 · URGENTE + NON IMPORTANTE</text>
+        <text x={xMid+7} y={yMid+12} fontSize="7.5" fill="rgba(107,114,128,0.50)" fontFamily="monospace" letterSpacing="0.08em">Q4 · NON URGENTE + NON IMPORTANTE</text>
+        {/* Axis labels */}
+        <text x={LP + IW*0.25} y={H-4} fontSize="8" fill="rgba(255,255,255,0.22)" textAnchor="middle" fontFamily="monospace" letterSpacing="0.1em">← URGENTE</text>
+        <text x={LP + IW*0.75} y={H-4} fontSize="8" fill="rgba(255,255,255,0.22)" textAnchor="middle" fontFamily="monospace" letterSpacing="0.1em">NON URGENTE →</text>
+        <text fontSize="7.5" fill="rgba(255,255,255,0.18)" textAnchor="middle" fontFamily="monospace"
+          transform={`translate(13, ${TP + IH*0.25}) rotate(-90)`}>IMPORTANTE</text>
+        <text fontSize="7.5" fill="rgba(255,255,255,0.18)" textAnchor="middle" fontFamily="monospace"
+          transform={`translate(13, ${yMid + IH*0.25}) rotate(-90)`}>NON IMP.</text>
+        {/* Bubbles */}
+        {plotNodes.map(n => {
+          const c = Q_CFG[n.q]
+          const isHov = hovered?.id === n.id
+          return (
+            <g key={n.id} style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHovered(n)}
+              onMouseLeave={() => setHovered(null)}>
+              <circle cx={n.x} cy={n.y} r={n.r + (isHov ? 3 : 0)}
+                fill={isHov ? c.svgFillHov : c.svgFillNorm}
+                stroke={c.svgStroke} strokeWidth={isHov ? 1.8 : 1}
+                style={{ transition: 'all 0.1s' }} />
+              <text x={n.x} y={n.y + 3.5} fontSize="7" fill={c.svgText}
+                textAnchor="middle" fontFamily="monospace"
+                style={{ pointerEvents: 'none', opacity: isHov ? 1 : 0.8, userSelect: 'none' }}>
+                {n.name.length > 13 ? n.name.slice(0, 11) + '…' : n.name}
+              </text>
+            </g>
+          )
+        })}
+        {/* Legend */}
+        <g transform={`translate(${LP}, ${H - BP + 4})`}>
+          <circle cx="8"   cy="7" r="5"  fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="0.8"/>
+          <text x="17"  y="11" fontFamily="monospace" fontSize="7.5" fill="rgba(255,255,255,0.28)">RTO basso</text>
+          <circle cx="104" cy="6" r="9"  fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="0.8"/>
+          <text x="118" y="11" fontFamily="monospace" fontSize="7.5" fill="rgba(255,255,255,0.28)">RTO alto</text>
+          <text x="210" y="11" fontFamily="monospace" fontSize="7.5" fill="rgba(255,255,255,0.17)">· sinistra=urgente · alto=importante · hover per dettagli</text>
+        </g>
+      </svg>
+      {/* Hover tooltip */}
+      {hovered && (
+        <div className="absolute top-3 right-3 bg-dt-surface border border-dt-border rounded px-3 py-2.5 font-mono text-xs max-w-56 z-10 shadow-xl">
+          <div className={`${Q_CFG[hovered.q].cls} font-bold mb-1`}>{hovered.q} · {Q_CFG[hovered.q].sublabel}</div>
+          <div className="text-gray-200 font-bold mb-1.5">{hovered.name}</div>
+          <div className="space-y-0.5 text-gray-500">
+            <div>Type: <span className="text-gray-400">{hovered.type}</span></div>
+            <div>Hop: <span className="text-gray-300">{hovered.distance}</span></div>
+            <div>Eff. RTO: <span className="text-cyan-400">{hovered.effective_rto_minutes ?? '—'} min</span></div>
+            {hovered.recovery_cost_usd != null && (
+              <div>Cost: <span className="text-yellow-400">€{hovered.recovery_cost_usd}</span></div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Left nav sections ────────────────────────────────────────── */
 const SECTIONS = [
   { id: 'executive',  label: 'Executive Summary',           Icon: Zap       },
+  { id: 'eisenhower', label: 'Eisenhower Priority',         Icon: Target    },
   { id: 'impact',     label: 'Impact Table',                Icon: Network   },
   { id: 'timeline',   label: 'Timeline of Events',          Icon: Clock     },
   { id: 'rootcause',  label: 'Root Cause Analysis',         Icon: Search    },
@@ -294,7 +503,82 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] }, o
             </div>
           </Section>
 
-          {/* ── 2. Impact Table ── */}
+          {/* ── 2. Eisenhower Priority Matrix ── */}
+          <Section
+            id="eisenhower" Icon={Target} title="EISENHOWER PRIORITY MATRIX"
+            badge={simulationResult.eisenhower_quadrant ?? 'N/A'}
+            sectionRef={el => sectionRefs.current['eisenhower'] = el}
+          >
+            {/* Active quadrant banner */}
+            {simulationResult.eisenhower_quadrant ? (() => {
+              const qk = simulationResult.eisenhower_quadrant
+              const c  = Q_CFG[qk]
+              return (
+                <div className={`flex items-center gap-3 mb-5 px-4 py-3 rounded-lg border ${c.borderCls} ${c.bgCls}`}>
+                  <span className="text-2xl">{c.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-bold font-mono ${c.cls}`}>{qk} — {c.label}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{c.sublabel}</div>
+                  </div>
+                  <div className={`text-xs font-mono ${c.cls} text-right shrink-0 hidden lg:block`}>{c.action}</div>
+                </div>
+              )
+            })() : (
+              <div className="text-xs text-gray-500 italic mb-4">
+                Eisenhower classification not available — run a new simulation to get the quadrant.
+              </div>
+            )}
+
+            {/* 2×2 matrix */}
+            <div className="mb-5">
+              <div className="grid grid-cols-[20px_1fr]">
+                {/* column headers row */}
+                <div />
+                <div className="grid grid-cols-2 text-center text-xs font-mono text-gray-500 pb-1.5">
+                  <span>⚡ URGENTE</span>
+                  <span>◌ NON URGENTE</span>
+                </div>
+                {/* Y-axis labels + grid */}
+                <div className="flex flex-col">
+                  <div className="flex-1 flex items-center justify-center">
+                    <span className="text-xs font-mono text-gray-600"
+                      style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)', letterSpacing: '0.08em' }}>
+                      IMPORTANTE
+                    </span>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center">
+                    <span className="text-xs font-mono text-gray-600"
+                      style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)', letterSpacing: '0.07em' }}>
+                      NON IMP.
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-px bg-dt-border/20 rounded-lg overflow-hidden border border-dt-border/30">
+                  {['Q1', 'Q2', 'Q3', 'Q4'].map(qk => (
+                    <QuadrantCell
+                      key={qk}
+                      qk={qk}
+                      isActive={simulationResult.eisenhower_quadrant === qk}
+                      sim={simulationResult}
+                      blast={blastRadius}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Bubble chart */}
+            <div>
+              <div className="text-xs font-mono text-gray-500 mb-2 flex items-center gap-2">
+                <span>POSIZIONAMENTO NODI — URGENCY × IMPORTANCE</span>
+                <span className="text-gray-700">·</span>
+                <span className="text-gray-600">{blastRadius.length} nodi mappati</span>
+              </div>
+              <EisenhowerBubbleChart blast={blastRadius} simulationResult={simulationResult} />
+            </div>
+          </Section>
+
+          {/* ── 3. Impact Table ── */}
           <Section
             id="impact" Icon={Network} title="IMPACT TABLE"
             badge={`${blastRadius.length} nodes`}
@@ -338,7 +622,7 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] }, o
             </div>
           </Section>
 
-          {/* ── 3. Timeline of Events ── */}
+          {/* ── 4. Timeline of Events ── */}
           <Section
             id="timeline" Icon={Clock} title="TIMELINE OF EVENTS"
             badge={`${timelineEvents.length} events`}
@@ -369,7 +653,7 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] }, o
             )}
           </Section>
 
-          {/* ── 4. Root Cause Analysis ── */}
+          {/* ── 5. Root Cause Analysis ── */}
           <Section
             id="rootcause" Icon={Search} title="ROOT CAUSE ANALYSIS"
             sectionRef={el => sectionRefs.current['rootcause'] = el}
@@ -391,7 +675,7 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] }, o
             )}
           </Section>
 
-          {/* ── 5. AI Recovery Playbook ── */}
+          {/* ── 6. AI Recovery Playbook ── */}
           {simulationResult.origin_node_id && (
             <Section
               id="playbook" Icon={BookOpen} title="AI RECOVERY PLAYBOOK"
@@ -405,7 +689,7 @@ function SimulationReport({ simulationResult = null, topology = { nodes: [] }, o
             </Section>
           )}
 
-          {/* ── 6. Mitigation & Recommendations ── */}
+          {/* ── 7. Mitigation & Recommendations ── */}
           <Section
             id="mitigation" Icon={Shield} title="MITIGATION ACTIONS & RECOMMENDATIONS"
             sectionRef={el => sectionRefs.current['mitigation'] = el}
