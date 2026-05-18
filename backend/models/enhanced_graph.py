@@ -87,3 +87,5 @@ class EnhancedSimulationWithTimeline(BaseModel):
     validation_score: Optional[float] = None
     # Aggregated cost across all affected nodes
     total_recovery_cost_usd: Optional[float] = None
+    # Eisenhower matrix quadrant: Q1 (urgent+important) … Q4 (defer)
+    eisenhower_quadrant: Optional[str] = None

@@ -12,9 +12,16 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from algorithms.eisenhower_classifier import (
+    EisenhowerInput, EisenhowerQuadrant, classify_dr_event,
+)
 from db.neo4j_client import Neo4jClient
 from db.qdrant_client import QdrantClient
 from db.simulation_cache import SimulationCache, get_simulation_cache
+from models.enhanced_graph import (
+    EnhancedAffectedNode, EnhancedSimulationWithTimeline,
+    MonitoringState, RecoveryStrategy,
+)
 from settings import Settings
 
 log = structlog.get_logger()
@@ -190,16 +197,79 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 {"id": affected_node.id},
             )
 
+        # Eisenhower classification
+        blast_radius_eis = [
+            EnhancedAffectedNode(
+                id=n.id,
+                name=n.name,
+                type=n.type,
+                distance=n.distance,
+                step_time_ms=n.step_time_ms,
+                estimated_rto_minutes=n.estimated_rto_minutes or 0.0,
+                estimated_rpo_minutes=n.estimated_rpo_minutes or 0.0,
+                effective_rto_minutes=n.estimated_rto_minutes or 0.0,
+                effective_rpo_minutes=n.estimated_rpo_minutes or 0.0,
+                recovery_strategy=RecoveryStrategy.GENERIC,
+                monitoring_state=MonitoringState.UNKNOWN,
+            )
+            for n in affected
+        ]
+        worst_rto = max((n.effective_rto_minutes for n in blast_radius_eis), default=0.0)
+        worst_rpo = max((n.effective_rpo_minutes for n in blast_radius_eis), default=0.0)
+        sim_snapshot = EnhancedSimulationWithTimeline(
+            origin_node_id=node_id,
+            blast_radius=blast_radius_eis,
+            timeline_steps=[],
+            max_distance=max_distance,
+            total_duration_ms=5000,
+            worst_case_rto_minutes=worst_rto,
+            worst_case_rpo_minutes=worst_rpo,
+        )
+        origin_row = next((r for r in rows if r.get("distance") == 0), rows[0] if rows else {})
+        eis_input = EisenhowerInput(
+            simulation=sim_snapshot,
+            rto_target_minutes=float(origin_row.get("rto_minutes") or 60.0),
+            rpo_target_minutes=float(origin_row.get("rpo_minutes") or 15.0),
+            cascade_in_progress=len(affected) > 1,
+            affects_production=True,
+        )
+        quadrant = classify_dr_event(eis_input)
+
         lines = [
             f"💥 Blast radius for '{node_id}' ({len(affected)} affected nodes):\n",
             f"📊 Simulation ID: {sim_id}\n",
+            f"🎯 Eisenhower Quadrant: {quadrant.value}\n",
         ]
         for r in rows:
             rto = f"RTO={r.get('rto_minutes')}min" if r.get("rto_minutes") else ""
             lines.append(f"  depth={r['distance']} | {r['name']} ({r['type']}) {rto}")
         lines.append(f"\nTimeline: 0-5000ms ({len(timeline_steps)} steps)")
-        text = "\n".join(lines)
 
+        # Q1 auto-routing: immediately append recovery plan
+        if quadrant == EisenhowerQuadrant.Q1:
+            log.info("mcp.q1_auto_routing", node_id=node_id)
+            node_rows = await neo4j.run(
+                "MATCH (n:InfraNode {id: $id}) RETURN n.name AS name, n.type AS type, "
+                "n.rto_minutes AS rto, n.rpo_minutes AS rpo",
+                {"id": node_id},
+            )
+            if node_rows:
+                n = node_rows[0]
+                lines.append(
+                    f"\n\n🚨 Q1 AUTO-ROUTING → get_recovery_plan('{node_id}')\n"
+                    f"Recovery Plan for {n['name']} ({n['type']})\n"
+                    f"RTO target: {n['rto']} min | RPO target: {n['rpo']} min\n\n"
+                    "Steps:\n"
+                    "1. Verify monitoring alerts — confirm failure is real\n"
+                    "2. Isolate the failed component to prevent write amplification\n"
+                    "3. Promote replica or activate standby if available\n"
+                    "4. Restore from last snapshot/backup within RPO window\n"
+                    "5. Re-validate downstream dependencies\n"
+                    "6. Update Neo4j node status to 'healthy'\n"
+                    "7. Document post-mortem in architecture.md"
+                )
+
+        text = "\n".join(lines)
         return [TextContent(type="text", text=text)]
 
     if name == "get_recovery_plan":

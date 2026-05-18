@@ -23,6 +23,7 @@ from models.enhanced_graph import (
 from models.errors import ErrorResponse
 from algorithms.cascading_failure import bfs_with_latency
 from algorithms.cost_estimator import estimate_hourly_cost, estimate_recovery_cost
+from algorithms.eisenhower_classifier import EisenhowerInput, classify_dr_event
 from algorithms.playbook_generator import generate_playbook
 from algorithms.rto_rpo_calculator import (
     calculate_effective_rto,
@@ -255,13 +256,8 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
 
         total_cost = round(sum(n.recovery_cost_usd or 0 for n in affected_node_list), 2)
 
-        # Record Prometheus metrics
-        origin_type = affected_nodes.get(body.node_id, {}).get("type", "unknown")
-        simulation_latency.labels(origin_node_type=origin_type).observe(time.perf_counter() - _sim_start)
-        affected_nodes_histogram.observe(len(affected_node_list))
-
-        log.info("simulate_success", node_id=body.node_id, affected_count=len(affected_node_list), total_cost_usd=total_cost)
-        return EnhancedSimulationWithTimeline(
+        # Build simulation result
+        simulation_result = EnhancedSimulationWithTimeline(
             origin_node_id=body.node_id,
             blast_radius=affected_node_list,
             timeline_steps=timeline_steps,
@@ -272,6 +268,32 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
             model_version="1.0-accurate",
             total_recovery_cost_usd=total_cost,
         )
+
+        # Eisenhower classification
+        origin_data = affected_nodes.get(body.node_id, {})
+        eis_input = EisenhowerInput(
+            simulation=simulation_result,
+            rto_target_minutes=float(origin_data.get("rto_minutes") or 60.0),
+            rpo_target_minutes=float(origin_data.get("rpo_minutes") or 15.0),
+            cascade_in_progress=len(affected_node_list) > 1,
+            affects_production=True,
+        )
+        quadrant = classify_dr_event(eis_input)
+        simulation_result.eisenhower_quadrant = quadrant.value
+
+        # Record Prometheus metrics
+        origin_type = origin_data.get("type", "unknown")
+        simulation_latency.labels(origin_node_type=origin_type).observe(time.perf_counter() - _sim_start)
+        affected_nodes_histogram.observe(len(affected_node_list))
+
+        log.info(
+            "simulate_success",
+            node_id=body.node_id,
+            affected_count=len(affected_node_list),
+            total_cost_usd=total_cost,
+            eisenhower_quadrant=quadrant.value,
+        )
+        return simulation_result
 
     except HTTPException:
         raise
