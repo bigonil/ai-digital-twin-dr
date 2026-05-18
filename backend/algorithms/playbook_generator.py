@@ -141,20 +141,30 @@ Requirements:
 
 async def _call_claude(prompt: str, doc_context: str, settings) -> str:
     """
-    Call Claude API with prompt caching.
+    Call Claude API with prompt caching (GA — no beta header required).
 
-    Cache layout (static → dynamic, left to right):
-      1. system block   — _SYSTEM_PROMPT, identical on every call → cache_control
-      2. user block 0   — Qdrant doc context, changes by node type → cache_control
-      3. user block 1   — node-specific prompt (name/region/topology) → NOT cached
+    Cache layout (static → dynamic):
+      1. system block   — _SYSTEM_PROMPT, identical on every call
+                          cache_control: ephemeral, ttl=1h
+      2. user block 0   — Qdrant doc context, stable per node type
+                          cache_control: ephemeral, ttl=1h
+      3. user block 1   — node-specific content (name/region/topology)
+                          NOT cached — changes every call
+
+    Minimum cacheable prefix: 4 096 tokens for claude-opus-4-7/4-6/4-5,
+    1 024 tokens for claude-sonnet-4-6/4-5.
+    Calls below the threshold are processed normally without error;
+    cache_creation_input_tokens will be 0.
     """
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+    _cache = {"type": "ephemeral", "ttl": "1h"}
 
     system_blocks = [
         {
             "type": "text",
             "text": _SYSTEM_PROMPT,
-            "cache_control": {"type": "ephemeral"},
+            "cache_control": _cache,
         }
     ]
 
@@ -163,29 +173,39 @@ async def _call_claude(prompt: str, doc_context: str, settings) -> str:
         user_content.append({
             "type": "text",
             "text": f"## Relevant DR Documentation (from knowledge base)\n{doc_context[:3500]}",
-            "cache_control": {"type": "ephemeral"},
+            "cache_control": _cache,
         })
     user_content.append({"type": "text", "text": prompt})
 
-    message = await client.beta.messages.create(
+    message = await client.messages.create(
         model=settings.anthropic_model,
         max_tokens=8192,
         system=system_blocks,
         messages=[{"role": "user", "content": user_content}],
-        betas=["prompt-caching-2024-07-31"],
     )
 
     if message.stop_reason == "max_tokens":
         log.warning("playbook_claude_truncated", stop_reason="max_tokens")
 
     usage = message.usage
-    log.info(
-        "playbook_claude_cache",
-        cache_created=getattr(usage, "cache_creation_input_tokens", 0),
-        cache_read=getattr(usage, "cache_read_input_tokens", 0),
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-    )
+    cache_created = getattr(usage, "cache_creation_input_tokens", 0)
+    cache_read = getattr(usage, "cache_read_input_tokens", 0)
+
+    if cache_created == 0 and cache_read == 0:
+        log.warning(
+            "playbook_claude_cache_miss",
+            reason="prefix below minimum token threshold for this model",
+            total_input_tokens=usage.input_tokens,
+            model=settings.anthropic_model,
+        )
+    else:
+        log.info(
+            "playbook_claude_cache",
+            cache_created=cache_created,
+            cache_read=cache_read,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
 
     return message.content[0].text
 
