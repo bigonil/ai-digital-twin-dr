@@ -173,7 +173,7 @@ async def simulate_disaster(body: DisasterSimulationRequest, request: Request):
         affected_nodes = await bfs_with_latency(
             origin_node_id=body.node_id,
             depth=body.depth,
-            get_outgoing_edges_fn=request.app.state.neo4j.get_outgoing_edges,
+            get_outgoing_edges_fn=request.app.state.neo4j.get_dependents,
             get_node_details_fn=request.app.state.neo4j.get_node_details,
         )
 

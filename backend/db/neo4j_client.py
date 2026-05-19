@@ -112,16 +112,26 @@ class Neo4jClient:
 
     async def simulate_disaster(self, node_id: str, depth: int = 5) -> list[dict]:
         depth = max(1, min(depth, 10))  # clamp to safe range
-        # BFS to find all nodes affected by a cascading failure
-        # Follow BOTH directions: upstream dependencies AND downstream dependents
+        # Find nodes that break when `node_id` fails: traverse DEPENDS_ON in reverse.
+        # (affected)-[:DEPENDS_ON*]->(origin) means affected requires origin to function.
         query = f"""
-        MATCH path = (origin {{id: $node_id}})-[*1..{depth}]-(affected)
+        MATCH path = (affected:InfraNode)-[:DEPENDS_ON*1..{depth}]->(origin {{id: $node_id}})
         WHERE origin <> affected
         WITH affected, MIN(length(path)) AS dist
         RETURN affected.id AS id, affected.name AS name, affected.type AS type,
                affected.rto_minutes AS rto_minutes, affected.rpo_minutes AS rpo_minutes,
                dist AS distance
         ORDER BY dist
+        """
+        return await self.run(query, {"node_id": node_id})
+
+    async def get_dependents(self, node_id: str) -> List[Dict[str, Any]]:
+        """Return nodes that DEPEND_ON node_id — i.e. break when node_id fails."""
+        query = """
+        MATCH (dependent:InfraNode)-[r:DEPENDS_ON]->(n:InfraNode {id: $node_id})
+        RETURN dependent.id as target, type(r) as type,
+               r.latency_ms as latency_ms, r.shares_resource as shares_resource,
+               r.contention_factor as contention_factor
         """
         return await self.run(query, {"node_id": node_id})
 
