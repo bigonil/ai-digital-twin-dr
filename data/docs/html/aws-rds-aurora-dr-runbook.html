@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — AWS RDS Aurora PostgreSQL — Disaster Recovery Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>AWS RDS Aurora PostgreSQL — Disaster Recovery Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>AWS RDS Aurora PostgreSQL — Disaster Recovery Runbook</h1>
+  <p class="subtitle">Resource Type: <code>aws_rds_cluster</code> | Strategy: replica_fallback, multi_az, backup_fallback</p>
+</header>
+<article>
+
+<h3>Overview</h3>
+<p>Aurora PostgreSQL clusters (<code>aws_rds_cluster</code>) consist of one writer instance and up to 15 read replicas across multiple Availability Zones. Aurora storage is replicated 6-way across 3 AZs automatically. The cluster endpoint always points to the current writer — DNS failover happens within 30–120 seconds.</p>
+<p>RTO targets: 1–2 min (auto-failover) | 15–30 min (manual promote) | 60–90 min (restore from backup)<br>
+RPO targets: &lt; 30 seconds (replica lag) | &lt; 5 min (automated backup)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Writer Instance Failure (replica_fallback)</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+  <li>CloudWatch alarm: <code>RDS/DBInstanceNotAvailable</code> on writer instance</li>
+  <li>Application errors: <code>FATAL: remaining connection slots are reserved</code></li>
+  <li>CloudWatch metric: <code>RDS/DatabaseConnections</code> drops to 0 on writer</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws rds describe-db-clusters \
+  --db-cluster-identifier app-postgres \
+  --query 'DBClusters[0].{Status:Status,Writer:DBClusterMembers[?IsClusterWriter==`true`]}'
+
+aws rds describe-events \
+  --source-identifier app-postgres \
+  --source-type db-cluster \
+  --duration 60</code></pre>
+
+<p><strong>Recovery Steps — replica_fallback:</strong></p>
+<ol>
+  <li>Confirm failure is real (not monitoring flap): check 3 consecutive alarm data points</li>
+  <li>Aurora initiates auto-failover — a replica is promoted in 30–120 seconds</li>
+  <li>Monitor failover progress:
+    <pre><code>aws rds describe-db-clusters \
+  --db-cluster-identifier app-postgres \
+  --query 'DBClusters[0].Status'</code></pre>
+  </li>
+  <li>Verify cluster endpoint resolves to new writer IP:
+    <pre><code>nslookup app-postgres.cluster-&lt;id&gt;.us-east-1.rds.amazonaws.com</code></pre>
+  </li>
+  <li>Check replica lag on remaining replicas drops to 0:
+    <pre><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name AuroraReplicaLag \
+  --dimensions Name=DBInstanceIdentifier,Value=app-postgres-0 \
+  --start-time $(date -u -d '5 min ago' +%FT%TZ) \
+  --end-time $(date -u +%FT%TZ) \
+  --period 60 --statistics Average</code></pre>
+  </li>
+  <li>Validate application connectivity — check app health endpoint returns 200</li>
+  <li>Update Neo4j node status: <code>MATCH (n:InfraNode {id: $id}) SET n.status = 'healthy'</code></li>
+</ol>
+
+<p><strong>Verification:</strong> <code>aws rds describe-db-clusters</code> shows <code>Status: available</code>, writer instance is different from before failover.<br>
+<strong>Rollback:</strong> Not applicable — replica promotion is one-way. Keep old writer as new replica.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Multi-AZ Failover (multi_az)</h2>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+  <li>Confirm AZ failure via AWS Health Dashboard: <code>aws health describe-events --filter eventTypeCategories=issue</code></li>
+  <li>Force failover if auto-failover stalls:
+    <pre><code>aws rds failover-db-cluster \
+  --db-cluster-identifier app-postgres \
+  --target-db-instance-identifier app-postgres-1</code></pre>
+  </li>
+  <li>Monitor: failover completes in 20–35 seconds for Multi-AZ instances</li>
+  <li>DNS propagation: cluster endpoint TTL is 5 seconds, clients reconnect automatically</li>
+  <li>Scale down failed AZ capacity if needed; Aurora storage is unaffected</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Full Cluster Failure (backup_fallback)</h2>
+
+<p><strong>Recovery Steps — Restore from Snapshot:</strong></p>
+<ol>
+  <li>List available snapshots within RPO window:
+    <pre><code>aws rds describe-db-cluster-snapshots \
+  --db-cluster-identifier app-postgres \
+  --query 'sort_by(DBClusterSnapshots,&amp;SnapshotCreateTime)[-3:]' \
+  --output table</code></pre>
+  </li>
+  <li>Restore to new cluster:
+    <pre><code>aws rds restore-db-cluster-from-snapshot \
+  --db-cluster-identifier app-postgres-restored \
+  --snapshot-identifier &lt;snapshot-id&gt; \
+  --engine aurora-postgresql \
+  --engine-version 15.4 \
+  --db-subnet-group-name &lt;subnet-group&gt; \
+  --vpc-security-group-ids &lt;sg-id&gt;</code></pre>
+  </li>
+  <li>Add writer instance:
+    <pre><code>aws rds create-db-instance \
+  --db-instance-identifier app-postgres-restored-writer \
+  --db-cluster-identifier app-postgres-restored \
+  --db-instance-class db.r7g.large \
+  --engine aurora-postgresql</code></pre>
+  </li>
+  <li>Update application connection string to new cluster endpoint</li>
+  <li>Validate data integrity: <code>SELECT COUNT(*) FROM critical_table; SELECT MAX(created_at) FROM orders;</code></li>
+  <li>Expected RTO: 45–90 minutes depending on snapshot size</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_rds_cluster</code>:</p>
+<ul>
+  <li><code>RDS/CPUUtilization</code> — alert at &gt; 80% for 5 minutes</li>
+  <li><code>RDS/AuroraReplicaLag</code> — alert at &gt; 30 seconds (replica falling behind)</li>
+  <li><code>RDS/DatabaseConnections</code> — alert if drops to 0 (writer failure)</li>
+  <li><code>RDS/FreeableMemory</code> — alert at &lt; 500 MB</li>
+  <li><code>RDS/BufferCacheHitRatio</code> — informational, target &gt; 99%</li>
+  <li><code>RDS/CommitLatency</code> — alert at &gt; 10 ms (storage pressure)</li>
+  <li><code>RDS/SelectLatency</code> — alert at &gt; 5 ms</li>
+  <li><code>RDS/WriteIOPS</code> — monitor for unusual spikes</li>
+</ul>
+
+<p>CloudWatch alarm for writer failure:</p>
+<pre><code>aws cloudwatch put-metric-alarm \
+  --alarm-name aurora-writer-connections-zero \
+  --metric-name DatabaseConnections \
+  --namespace AWS/RDS \
+  --statistic Average \
+  --period 60 \
+  --threshold 0 \
+  --comparison-operator LessThanOrEqualToThreshold \
+  --evaluation-periods 2 \
+  --dimensions Name=DBClusterIdentifier,Value=app-postgres</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Cascading Failure Risk</h2>
+
+<p>Aurora failure cascades to:</p>
+<ol>
+  <li><strong>Application servers (aws_instance / ASG)</strong> — connection errors → increased error rate → possible OOM from retry storms</li>
+  <li><strong>Cache (ElastiCache Redis)</strong> — if app falls back to direct DB reads during cache miss, amplifies DB load</li>
+  <li><strong>SQS consumers</strong> — jobs requiring DB writes fail and route to DLQ</li>
+</ol>
+<p>Mitigation: circuit breaker on DB connection pool; <code>max_connections</code> parameter group tuned per instance class.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>DR Region Failover (us-east-1 → eu-west-1)</h2>
+
+<ol>
+  <li>Promote Aurora Global Database secondary cluster in eu-west-1:
+    <pre><code>aws rds failover-global-cluster \
+  --global-cluster-identifier app-postgres-global \
+  --target-db-cluster-identifier arn:aws:rds:eu-west-1:&lt;account&gt;:cluster:app-postgres-dr</code></pre>
+  </li>
+  <li>Update Route53 records to point to eu-west-1 cluster endpoint</li>
+  <li>Scale up eu-west-1 Aurora cluster: add writer + 1 replica</li>
+  <li>Verify replication lag was &lt; 5 min before failover (check <code>AuroraGlobalDBReplicatedWriteIO</code>)</li>
+</ol>
+
+</article>
+</body>
+</html>

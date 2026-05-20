@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Recovery Strategies Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Recovery Strategies Guide</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Recovery Strategies Guide — ATHENA DR Platform</h1>
+  <p class="subtitle">ATHENA classifies each infrastructure node with a recovery strategy. The strategy determines RTO, RPO, recovery cost, and the runbook approach. Strategies are stored as <code>recovery_strategy</code> on Neo4j <code>InfraNode</code> nodes.</p>
+</header>
+<article>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Strategy: replica_fallback</h2>
+
+<p><strong>Definition:</strong> A standby replica of the primary resource exists and can be promoted with minimal data loss.</p>
+
+<p><strong>Applicable node types:</strong> <code>aws_rds_cluster</code>, <code>aws_db_instance</code>, <code>aws_elasticache_cluster</code></p>
+
+<p><strong>Effective RTO:</strong> 1–5 minutes (automatic promotion) / 10–15 minutes (manual)<br>
+<strong>Effective RPO:</strong> &lt; 30 seconds (synchronous replication) / &lt; 5 minutes (asynchronous)</p>
+
+<p><strong>How it works:</strong></p>
+<ol>
+  <li>Health check detects primary failure (10–30 second interval)</li>
+  <li>Replica with most recent data is selected for promotion</li>
+  <li>DNS endpoint is updated to point to new primary</li>
+  <li>Existing connections receive error and must reconnect</li>
+  <li>Old primary is demoted to replica role when it recovers</li>
+</ol>
+
+<p><strong>Cost multiplier:</strong> 1.5x (brief extra compute during promotion + double-write during catch-up)</p>
+
+<p><strong>Prerequisites for strategy to work:</strong></p>
+<ul>
+  <li><code>automatic_failover_enabled = true</code> on ElastiCache</li>
+  <li>Aurora Multi-AZ enabled with at least 1 replica</li>
+  <li>Application using cluster endpoint (not instance endpoint) for Aurora</li>
+  <li>Connection pool with retry logic and exponential backoff</li>
+</ul>
+
+<p><strong>Red flags indicating strategy will fail:</strong></p>
+<ul>
+  <li>Replica lag &gt; 30 seconds at time of primary failure (risk of data loss beyond RPO)</li>
+  <li>All replicas in same AZ as failed primary</li>
+  <li>Application hardcoded to instance endpoint instead of cluster endpoint</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Strategy: multi_az</h2>
+
+<p><strong>Definition:</strong> Resource is automatically distributed across multiple Availability Zones. AWS manages failover transparently.</p>
+
+<p><strong>Applicable node types:</strong> <code>aws_lb</code>, <code>aws_rds_cluster</code> (Multi-AZ deployment), <code>aws_db_instance</code> (Multi-AZ)</p>
+
+<p><strong>Effective RTO:</strong> &lt; 2 minutes (automatic) / &lt; 30 seconds for ALB<br>
+<strong>Effective RPO:</strong> 0 for ALB (stateless) / &lt; 60 seconds for RDS Multi-AZ</p>
+
+<p><strong>How it works:</strong></p>
+<ol>
+  <li>Primary instance fails or AZ becomes unavailable</li>
+  <li>AWS promotes standby in different AZ automatically</li>
+  <li>DNS CNAME for the endpoint is updated (60-second propagation)</li>
+  <li>No manual intervention required under normal conditions</li>
+</ol>
+
+<p><strong>Cost multiplier:</strong> 1.2x (standby instance always running, minimal extra during failover)</p>
+
+<p><strong>Key difference from replica_fallback:</strong></p>
+<ul>
+  <li><code>multi_az</code> implies AWS-managed automatic failover with no manual steps</li>
+  <li><code>replica_fallback</code> may require manual promotion or monitoring confirmation</li>
+</ul>
+
+<p><strong>Prerequisites:</strong></p>
+<ul>
+  <li>RDS Multi-AZ enabled (<code>multi_az = true</code>)</li>
+  <li>ALB subnets in ≥ 2 AZs</li>
+  <li>Route53 health checks configured for DNS-level failover</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Strategy: stateless</h2>
+
+<p><strong>Definition:</strong> Resource holds no persistent state. Recovery means simply replacing the failed instance; data comes from external stores (Aurora, Redis, S3).</p>
+
+<p><strong>Applicable node types:</strong> <code>aws_instance</code>, <code>aws_autoscaling_group</code>, <code>aws_lambda_function</code>, <code>aws_eks_cluster</code> (worker nodes)</p>
+
+<p><strong>Effective RTO:</strong> 1–3 minutes (ASG self-healing) / 5–10 minutes (new deployment)<br>
+<strong>Effective RPO:</strong> 0 (no state on instance)</p>
+
+<p><strong>How it works:</strong></p>
+<ol>
+  <li>Health check fails on instance</li>
+  <li>ASG terminates unhealthy instance and launches replacement</li>
+  <li>New instance bootstraps via user-data / cloud-init</li>
+  <li>Load balancer registers new instance after health check passes</li>
+</ol>
+
+<p><strong>Cost multiplier:</strong> 1.1x (brief extra cost to run replacement in parallel)</p>
+
+<p><strong>Prerequisites for quick recovery:</strong></p>
+<ul>
+  <li>ASG <code>health_check_type = "ELB"</code> (faster detection than EC2 checks)</li>
+  <li><code>health_check_grace_period</code> set appropriately for application startup time</li>
+  <li>Launch template uses latest AMI with pre-installed dependencies</li>
+  <li>Application configuration loaded from SSM Parameter Store / Secrets Manager (no manual config)</li>
+</ul>
+
+<p><strong>Anti-patterns to avoid:</strong></p>
+<ul>
+  <li>Storing session state in-memory on instances (lost on replacement)</li>
+  <li>Hardcoded IP addresses in configuration</li>
+  <li>Long instance startup sequences (&gt; 2 minutes) that delay health check pass</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Strategy: backup_fallback</h2>
+
+<p><strong>Definition:</strong> No live replica exists. Recovery requires restoring from a point-in-time snapshot or backup. This is the slowest strategy with highest data loss risk.</p>
+
+<p><strong>Applicable node types:</strong> <code>aws_s3_bucket</code> (without CRR), <code>aws_db_instance</code> (single-AZ, no replica), <code>aws_elasticache_cluster</code> (without replicas)</p>
+
+<p><strong>Effective RTO:</strong> 30–120 minutes (restore time depends on data volume)<br>
+<strong>Effective RPO:</strong> Time since last backup (typically 1–24 hours)</p>
+
+<p><strong>How it works:</strong></p>
+<ol>
+  <li>Failure detected on primary resource</li>
+  <li>Latest valid backup within RPO window is identified</li>
+  <li>New resource instance is provisioned from backup</li>
+  <li>Data integrity is validated</li>
+  <li>Application is reconfigured to use new instance</li>
+</ol>
+
+<p><strong>Cost multiplier:</strong> 4.0x (slow restore, temporary extra instances, engineering time)</p>
+
+<p><strong>Recovery time estimates by data volume:</strong></p>
+<ul>
+  <li>&lt; 100 GB: 30–45 minutes</li>
+  <li>100 GB – 1 TB: 1–3 hours</li>
+  <li>&gt; 1 TB: 3–8 hours (consider S3 Glacier Instant Retrieval for faster access)</li>
+</ul>
+
+<p><strong>Critical prerequisites:</strong></p>
+<ul>
+  <li>Automated daily backups enabled and tested (last restore test &lt; 30 days ago)</li>
+  <li>Backup stored in different region or account (protection against account-level incidents)</li>
+  <li>Known-good backup identified BEFORE declaring incident (saves 15–30 min during recovery)</li>
+</ul>
+
+<p><strong>Backup validation procedure (run monthly):</strong></p>
+<pre><code># Test restore to non-production environment
+aws rds restore-db-instance-from-db-snapshot \
+  --db-instance-identifier validation-test-$(date +%Y%m%d) \
+  --db-snapshot-identifier &lt;latest-snapshot-id&gt; \
+  --db-instance-class db.t3.medium \
+  --no-multi-az \
+  --tags Key=Purpose,Value=BackupValidation
+# Run integrity checks, then delete
+aws rds delete-db-instance --db-instance-identifier validation-test-$(date +%Y%m%d) --skip-final-snapshot</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Strategy: generic</h2>
+
+<p><strong>Definition:</strong> No specific recovery strategy is defined. Recovery requires manual investigation, identification of root cause, and improvised recovery steps.</p>
+
+<p><strong>Effective RTO:</strong> 30–120 minutes (highly variable)<br>
+<strong>Effective RPO:</strong> Unknown (depends on last good state)</p>
+
+<p><strong>Cost multiplier:</strong> 2.5x</p>
+
+<p><strong>This strategy indicates a gap in the DR design.</strong> Nodes with <code>generic</code> strategy should be assessed and migrated to a more specific strategy. Priority order: <code>replica_fallback</code> &gt; <code>multi_az</code> &gt; <code>stateless</code> &gt; <code>backup_fallback</code> &gt; <code>generic</code>.</p>
+
+<p><strong>Minimum recovery steps for generic strategy:</strong></p>
+<ol>
+  <li>Confirm failure is not a false positive (check 3 independent monitoring sources)</li>
+  <li>Identify last known good state (recent snapshots, recent successful health checks)</li>
+  <li>Isolate failed component to prevent cascading failures</li>
+  <li>Attempt restart / recreation of the resource</li>
+  <li>Validate all downstream dependencies after recovery</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>RTO/RPO Target Reference</h2>
+
+<div class="table-wrap"><table>
+  <thead>
+    <tr><th>Strategy</th><th>P50 RTO</th><th>P95 RTO</th><th>P50 RPO</th><th>P95 RPO</th><th>Cost Multiplier</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>replica_fallback</code></td><td>2 min</td><td>10 min</td><td>10 sec</td><td>5 min</td><td>1.5x</td></tr>
+    <tr><td><code>multi_az</code></td><td>30 sec</td><td>2 min</td><td>0</td><td>60 sec</td><td>1.2x</td></tr>
+    <tr><td><code>stateless</code></td><td>2 min</td><td>5 min</td><td>0</td><td>0</td><td>1.1x</td></tr>
+    <tr><td><code>backup_fallback</code></td><td>45 min</td><td>3 hr</td><td>4 hr</td><td>24 hr</td><td>4.0x</td></tr>
+    <tr><td><code>generic</code></td><td>30 min</td><td>2 hr</td><td>Unknown</td><td>Unknown</td><td>2.5x</td></tr>
+  </tbody>
+</table></div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Choosing the Right Strategy</h2>
+
+<p>Decision tree for architects assigning <code>recovery_strategy</code> to new nodes:</p>
+
+<ol>
+  <li><strong>Is the resource stateless?</strong> → <code>stateless</code></li>
+  <li><strong>Does the resource have a continuously-updated replica?</strong> → <code>replica_fallback</code></li>
+  <li><strong>Is AWS managing failover automatically across AZs?</strong> → <code>multi_az</code></li>
+  <li><strong>Is there a recent snapshot/backup but no live replica?</strong> → <code>backup_fallback</code></li>
+  <li><strong>None of the above</strong> → <code>generic</code> (and open an architecture review ticket)</li>
+</ol>
+
+</article>
+</body>
+</html>

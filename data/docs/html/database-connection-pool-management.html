@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Database Connection Pool Management During DR</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Database Connection Pool Management During DR</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Database Connection Pool Management During DR</h1>
+  <p class="subtitle">Connection pool failures are responsible for extending actual RTO beyond predicted RTO in 60% of database DR incidents. This guide covers connection pool configuration, RDS Proxy, and connection management during recovery.</p>
+</header>
+<article>
+
+<h2>The Connection Storm Problem</h2>
+
+<p><strong>Scenario:</strong> Aurora fails over. 6 application servers each hold a pool of 50 connections = 300 connections. All 300 connections are dropped simultaneously. All 300 reconnect simultaneously to new primary within 5 seconds.</p>
+
+<p><strong>Result:</strong> New primary receives 300 connection requests in 5 seconds. For <code>db.r7g.large</code> Aurora: <code>max_connections ≈ 2000</code>. Connection storm is handled, but:</p>
+<ul>
+  <li>Each connection setup requires authentication: CPU spike on new primary</li>
+  <li>Connection pool warm-up: 5–10 seconds of higher latency</li>
+  <li>If using <code>max_connections</code> smaller instance: connections may queue or fail</li>
+</ul>
+
+<p><strong>Mitigation options ranked by effectiveness:</strong></p>
+<ol>
+  <li><strong>RDS Proxy</strong> (best): buffers connections; app reconnects to Proxy, Proxy reconnects to new Aurora</li>
+  <li><strong>Exponential backoff in pool config</strong> (good): staggers reconnects over 10–30 seconds</li>
+  <li><strong>Pre-warming connection pool</strong> (basic): keep idle connections alive, reconnect on health check</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>RDS Proxy — Recommended for Production</h2>
+
+<p>RDS Proxy sits between the application and Aurora. It maintains a stable pool of connections to Aurora and handles failover transparently. Applications connect to the Proxy endpoint instead of the cluster endpoint.</p>
+
+<h3>Setup RDS Proxy</h3>
+
+<pre><code>aws rds create-db-proxy \
+  --db-proxy-name app-postgres-proxy \
+  --engine-family POSTGRESQL \
+  --auth '[{
+    "AuthScheme": "SECRETS",
+    "SecretArn": "arn:aws:secretsmanager:us-east-1:&lt;account&gt;:secret:app/postgres/credentials",
+    "IAMAuth": "DISABLED"
+  }]' \
+  --role-arn arn:aws:iam::&lt;account&gt;:role/rds-proxy-role \
+  --vpc-subnet-ids subnet-&lt;a&gt; subnet-&lt;b&gt; \
+  --vpc-security-group-ids sg-&lt;id&gt; \
+  --no-require-tls
+
+# Register Aurora cluster as proxy target
+aws rds register-db-proxy-targets \
+  --db-proxy-name app-postgres-proxy \
+  --db-cluster-identifiers app-postgres
+
+# Get proxy endpoint (update application config to use this)
+aws rds describe-db-proxies \
+  --db-proxy-name app-postgres-proxy \
+  --query 'DBProxies[0].Endpoint'</code></pre>
+
+<p><strong>RDS Proxy benefits during DR:</strong></p>
+<ul>
+  <li>Failover transparent to application (Proxy handles reconnect): app sees &lt; 30 second interruption vs 60–120 seconds without Proxy</li>
+  <li>Connection multiplexing: 300 app connections → 50 DB connections (reduces Aurora connection count)</li>
+  <li>Automatic credential rotation (reads from Secrets Manager)</li>
+  <li><code>max_connections_percent = 90</code>: never exhausts Aurora connection limit</li>
+</ul>
+
+<h3>Monitor RDS Proxy</h3>
+
+<pre><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name DatabaseConnectionsCurrentlyBorrowed \
+  --dimensions Name=ProxyName,Value=app-postgres-proxy \
+  --start-time $(date -u -d '15 min ago' +%FT%TZ) \
+  --end-time $(date -u +%FT%TZ) \
+  --period 60 --statistics Average</code></pre>
+
+<p>Key RDS Proxy metrics:</p>
+<ul>
+  <li><code>DatabaseConnectionsCurrentlyBorrowed</code> — active connections from pool</li>
+  <li><code>DatabaseConnectionsCurrentlySessionPinned</code> — connections that can't be multiplexed (watch for high values)</li>
+  <li><code>QueryRequests</code> — request rate through proxy</li>
+  <li><code>DatabaseConnectionRequests</code> — new DB connection attempts</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Application Connection Pool Configuration</h2>
+
+<h3>Python — SQLAlchemy (recommended settings for DR resilience)</h3>
+
+<pre><code>from sqlalchemy import create_engine
+from sqlalchemy.pool import QueuePool
+
+engine = create_engine(
+    "postgresql+psycopg2://admin:password@&lt;rds-proxy-endpoint&gt;:5432/appdb",
+    poolclass=QueuePool,
+    pool_size=20,               # Base pool size per process
+    max_overflow=10,            # Burst capacity
+    pool_timeout=30,            # Wait for connection before raising error
+    pool_recycle=1800,          # Recycle connections after 30 min (avoid stale)
+    pool_pre_ping=True,         # Test connection before use (detects Aurora failover)
+    connect_args={
+        "connect_timeout": 5,   # TCP connect timeout
+        "application_name": "app-server",
+        "options": "-c statement_timeout=30000"  # 30-second query timeout
+    }
+)</code></pre>
+
+<p><code>pool_pre_ping=True</code> is critical: before handing a connection to the application, SQLAlchemy sends <code>SELECT 1</code>. If the connection is stale (post-failover), it's discarded and a fresh connection is made. This prevents <code>OperationalError: server closed the connection unexpectedly</code>.</p>
+
+<h3>Node.js — pg-pool (recommended settings)</h3>
+
+<pre><code>const { Pool } = require('pg');
+
+const pool = new Pool({
+  host: process.env.DB_HOST,      // RDS Proxy endpoint
+  port: 5432,
+  database: 'appdb',
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  max: 20,                        // Max connections per Node process
+  idleTimeoutMillis: 30000,       // Close idle connections after 30s
+  connectionTimeoutMillis: 5000,  // Fail fast if can't connect in 5s
+  statement_timeout: 30000,       // Kill queries &gt; 30 seconds
+});
+
+// Health check: validate pool connectivity
+pool.on('error', (err) =&gt; {
+  console.error('Unexpected pool error:', err);
+  // Reconnect logic handled by pg-pool automatically
+});</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Post-Failover Connection Recovery Steps</h2>
+
+<p>After Aurora failover (with or without RDS Proxy):</p>
+
+<h3>With RDS Proxy (automated):</h3>
+<ol>
+  <li>RDS Proxy detects Aurora failover (&lt; 10 seconds via health check)</li>
+  <li>Proxy reconnects to new Aurora primary automatically</li>
+  <li>Application connections to Proxy remain stable (brief pause of &lt; 30 seconds)</li>
+  <li>Verify: <code>aws rds describe-db-proxies --db-proxy-name app-postgres-proxy --query 'DBProxies[0].Status'</code> → <code>available</code></li>
+</ol>
+
+<h3>Without RDS Proxy (manual):</h3>
+<ol>
+  <li>Detect failover: <code>aws rds describe-db-clusters --db-cluster-identifier app-postgres --query 'DBClusters[0].{Status:Status}'</code></li>
+  <li>Wait for cluster endpoint DNS to update (30–90 seconds after failover)</li>
+  <li>Force connection pool reset on all application instances:
+    <pre><code># If using SSM Run Command on ASG instances:
+aws ssm send-command \
+  --targets Key=tag:aws:autoscaling:groupName,Values=app-asg \
+  --document-name AWS-RunShellScript \
+  --parameters commands=["sudo systemctl restart app-service"]</code></pre>
+  </li>
+  <li>Monitor error rate in CloudWatch — should recover within 2 minutes of pool reset</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Connection Limits by Instance Class</h2>
+
+<p>Aurora PostgreSQL <code>max_connections</code> formula: <code>LEAST(DBInstanceClassMemory / 9531392, 5000)</code></p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>Instance Class</th><th>Memory</th><th>Max Connections</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>db.t3.medium</td><td>4 GB</td><td>~420</td></tr>
+    <tr><td>db.r6g.large</td><td>16 GB</td><td>~1700</td></tr>
+    <tr><td>db.r7g.large</td><td>16 GB</td><td>~1700</td></tr>
+    <tr><td>db.r7g.xlarge</td><td>32 GB</td><td>~3400</td></tr>
+    <tr><td>db.r7g.2xlarge</td><td>64 GB</td><td>~5000 (capped)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>Rule:</strong> Total application connection pool size must be &lt; 80% of Aurora max_connections.<br>
+For <code>db.r7g.large</code> with 6 EC2 instances: max pool per instance = <code>(1700 × 0.8) / 6 ≈ 226 connections</code>.</p>
+<p><strong>With RDS Proxy:</strong> Proxy multiplexes; application can have 1000 connections to Proxy while Proxy maintains only 50 to Aurora. Effectively removes connection limit as bottleneck.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Emergency: Kill Idle Connections</h2>
+
+<p>If Aurora is overloaded with idle connections post-failover:</p>
+<pre><code>-- Kill idle connections older than 5 minutes
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE state = 'idle'
+  AND state_change &lt; NOW() - INTERVAL '5 minutes'
+  AND pid &lt;&gt; pg_backend_pid();
+
+-- Check active connection count by application
+SELECT application_name, state, COUNT(*)
+FROM pg_stat_activity
+WHERE pid &lt;&gt; pg_backend_pid()
+GROUP BY application_name, state
+ORDER BY COUNT(*) DESC;
+
+-- Current max_connections setting
+SHOW max_connections;</code></pre>
+
+</article>
+</body>
+</html>

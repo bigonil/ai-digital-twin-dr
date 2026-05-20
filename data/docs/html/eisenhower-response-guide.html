@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Eisenhower DR Response Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Eisenhower DR Response Guide</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Eisenhower DR Response Guide — ATHENA Platform</h1>
+  <p class="subtitle">ATHENA classifies every disaster simulation into one of four Eisenhower quadrants based on urgency (RTO breach, cascade in progress, replication lag) and importance (affects production, critical blast radius ≤ 2 hops). The quadrant determines the response posture, escalation path, and whether the MCP server auto-routes to a recovery plan.</p>
+</header>
+<article>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Q1 — Urgent + Important: ACT IMMEDIATELY</h2>
+
+<p><strong>Definition:</strong> RTO or RPO is breached, or cascade is actively spreading to critical (distance ≤ 2) production nodes.</p>
+
+<p><strong>Trigger conditions (any one sufficient):</strong></p>
+<ul>
+  <li><code>worst_case_rto_minutes &gt; rto_target_minutes</code> (RTO already breached)</li>
+  <li><code>replication_lag_min &gt; rpo_target_minutes</code> (RPO breached)</li>
+  <li><code>cascade_in_progress = True</code> AND (<code>affects_production = True</code> OR <code>critical_blast = True</code>)</li>
+</ul>
+
+<p><strong>Automatic MCP action:</strong> <code>simulate_disaster</code> immediately appends <code>get_recovery_plan</code> response — no second tool call needed.</p>
+
+<p><strong>Response protocol:</strong></p>
+<ol>
+  <li><strong>T+0:</strong> Page on-call SRE via PagerDuty — P1 incident</li>
+  <li><strong>T+2min:</strong> Start executing recovery runbook — no investigation delay</li>
+  <li><strong>T+5min:</strong> Post to #incidents Slack: "P1 ACTIVE — [node] failing, blast radius [N] nodes, RTO breached"</li>
+  <li><strong>T+10min:</strong> Escalate to engineering lead if recovery not progressing</li>
+  <li><strong>T+15min:</strong> Executive update if user impact confirmed and RTO still breached</li>
+  <li><strong>T+30min:</strong> War room if multiple nodes still failing</li>
+</ol>
+
+<p><strong>Examples of Q1 scenarios:</strong></p>
+<ul>
+  <li>Aurora primary fails → 3 app servers cascade → ALB returns 503 (full outage)</li>
+  <li>RTO target = 15 min; actual RTO = 45 min (3x breach)</li>
+  <li>Replication lag = 20 min on Aurora replica (RPO breached before failover)</li>
+  <li>AZ failure affecting both Aurora and Redis simultaneously</li>
+</ul>
+
+<p><strong>Key metrics to monitor during Q1 response:</strong></p>
+<ul>
+  <li><code>RDS/DatabaseConnections</code> — must recover to &gt; 0</li>
+  <li><code>ApplicationELB/HealthyHostCount</code> — must recover to ≥ 2</li>
+  <li>Error rate — must drop below 1% before declaring resolved</li>
+  <li>Replication lag — must drop to &lt; 30 seconds</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Q2 — Not Urgent + Important: PLAN &amp; SCHEDULE</h2>
+
+<p><strong>Definition:</strong> No active breach, but the system is in a degraded state that will breach SLAs if unaddressed. Affects production.</p>
+
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li><code>worst_case_rto_minutes</code> is 70–100% of <code>rto_target_minutes</code> (warning zone, not yet breached)</li>
+  <li><code>affects_production = True</code> or <code>critical_blast = True</code></li>
+  <li>No active cascade (<code>cascade_in_progress = False</code>)</li>
+</ul>
+
+<p><strong>Response protocol:</strong></p>
+<ol>
+  <li><strong>T+0:</strong> Create tracking ticket in issue tracker (not a pager alert)</li>
+  <li><strong>T+30min:</strong> Assign to on-call or next available engineer</li>
+  <li><strong>T+2h:</strong> Complete investigation and document findings</li>
+  <li><strong>T+4h:</strong> Execute remediation during low-traffic window if possible</li>
+  <li><strong>T+24h:</strong> Close ticket with root cause and prevention steps</li>
+</ol>
+
+<p><strong>Examples of Q2 scenarios:</strong></p>
+<ul>
+  <li>Aurora replica lag at 25 seconds (threshold = 30 seconds) — approaching RPO limit</li>
+  <li>One of two ALB targets unhealthy — capacity reduced but service still up</li>
+  <li>Redis <code>FreeableMemory</code> at 150 MB — approaching eviction threshold</li>
+  <li>ASG running at <code>min_size</code> (2 instances) after one was terminated by spot reclaim</li>
+</ul>
+
+<p><strong>Recommended actions for Q2:</strong></p>
+<ul>
+  <li>Scale up before problem becomes urgent (add replica, increase ASG desired capacity)</li>
+  <li>Review and adjust CloudWatch alarm thresholds if false-positive rate is high</li>
+  <li>Run <code>check_drift</code> tool to compare Terraform state vs actual Neo4j graph</li>
+  <li>Schedule maintenance window for full remediation</li>
+</ul>
+
+<p><strong>Q2 escalation to Q1:</strong> If <code>apply_escalation</code> detects Q2 event unresolved after 15 minutes and conditions worsen to breach, reclassify to Q1 and page on-call.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Q3 — Urgent + Not Important: DELEGATE &amp; MONITOR</h2>
+
+<p><strong>Definition:</strong> Active failure or cascade, but the affected nodes are non-critical (distance &gt; 2, non-production, or internal tooling).</p>
+
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li><code>cascade_in_progress = True</code> OR RTO-related urgency signal</li>
+  <li><code>affects_production = False</code> AND <code>critical_blast = False</code> (no nodes at distance ≤ 2)</li>
+</ul>
+
+<p><strong>Response protocol:</strong></p>
+<ol>
+  <li><strong>T+0:</strong> Automated alert to team Slack channel (not pager)</li>
+  <li><strong>T+5min:</strong> Acknowledge and assign to next available engineer (not on-call rotation)</li>
+  <li><strong>T+30min:</strong> Begin investigation — lower urgency, can wait for context</li>
+  <li><strong>T+4h:</strong> Resolve or create tracking ticket for next sprint</li>
+</ol>
+
+<p><strong>Escalation timer:</strong> If Q3 event is unresolved after <strong>15 minutes</strong> (<code>ESCALATION_WINDOW_MIN</code>), <code>apply_escalation()</code> promotes it to Q1. This prevents neglected Q3 events from becoming production crises.</p>
+
+<p><strong>Examples of Q3 scenarios:</strong></p>
+<ul>
+  <li>Development environment database failing (cascade in progress, non-production)</li>
+  <li>Internal monitoring tool (Grafana) down — urgent but non-critical to users</li>
+  <li>Batch processing job failing in background (cascade in SQS consumers, no user impact)</li>
+  <li>DR region (eu-west-1) resources failing when primary (us-east-1) is healthy</li>
+</ul>
+
+<p><strong>Actions for Q3:</strong></p>
+<ul>
+  <li>Do NOT page on-call engineer unless escalation timer fires</li>
+  <li>Investigate and document root cause</li>
+  <li>Fix within business hours if in working hours; otherwise log for next day</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Q4 — Not Urgent + Not Important: DEFER</h2>
+
+<p><strong>Definition:</strong> Failure detected in non-critical component with no production impact and no active cascade. System is within RTO/RPO targets.</p>
+
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li><code>cascade_in_progress = False</code></li>
+  <li><code>affects_production = False</code></li>
+  <li><code>critical_blast = False</code></li>
+  <li><code>worst_case_rto_minutes</code> well within <code>rto_target_minutes</code></li>
+</ul>
+
+<p><strong>Response protocol:</strong></p>
+<ol>
+  <li>Create backlog ticket</li>
+  <li>Review in next sprint planning</li>
+  <li>No immediate action required</li>
+</ol>
+
+<p><strong>Examples of Q4 scenarios:</strong></p>
+<ul>
+  <li>Unused staging resource failing (no dependencies, non-production)</li>
+  <li>Slow replication on replica that is not currently used for reads</li>
+  <li>Monitoring exporter failing on non-critical internal service</li>
+  <li>Log aggregation pipeline delayed (no user impact)</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Eisenhower Escalation Flow</h2>
+
+<pre><code>Simulation result → classify_dr_event(EisenhowerInput)
+      │
+      ├── Q1 → Page on-call NOW + auto-attach recovery plan (MCP)
+      │         Execute runbook immediately
+      │
+      ├── Q2 → Create ticket + notify team (Slack)
+      │         Remediate within 4 hours
+      │         Monitor for escalation to Q1
+      │
+      ├── Q3 → Notify team (Slack only)
+      │         15-min escalation timer starts (apply_escalation)
+      │         → if unresolved: escalate to Q1
+      │
+      └── Q4 → Create backlog ticket
+                No immediate action</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Classification Constants</h2>
+
+<div class="table-wrap"><table>
+  <thead>
+    <tr><th>Parameter</th><th>Value</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>URGENCY_RATIO_WARN</code></td><td>0.70</td><td>RTO at 70% of target triggers warning (Q2 consideration)</td></tr>
+    <tr><td><code>ESCALATION_WINDOW_MIN</code></td><td>15.0</td><td>Minutes before Q3 auto-escalates to Q1</td></tr>
+    <tr><td><code>critical_blast</code> threshold</td><td>distance ≤ 2</td><td>Nodes within 2 hops of origin are "critical blast"</td></tr>
+  </tbody>
+</table></div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Response Time SLA by Quadrant</h2>
+
+<div class="table-wrap"><table>
+  <thead>
+    <tr><th>Quadrant</th><th>Acknowledge</th><th>First Action</th><th>Resolution Target</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Q1</td><td>2 minutes</td><td>5 minutes</td><td>Within RTO target</td></tr>
+    <tr><td>Q2</td><td>30 minutes</td><td>2 hours</td><td>24 hours</td></tr>
+    <tr><td>Q3</td><td>15 minutes</td><td>30 minutes</td><td>4 hours (or escalate to Q1)</td></tr>
+    <tr><td>Q4</td><td>Next business day</td><td>Next sprint</td><td>Best effort</td></tr>
+  </tbody>
+</table></div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Communication Templates</h2>
+
+<p><strong>Q1 Incident Slack message:</strong></p>
+<pre><code>🚨 P1 ACTIVE — [node_name] ([node_type]) FAILING
+Blast radius: [N] nodes affected | Max depth: [D] hops
+Worst-case RTO: [X] min (target: [Y] min) — BREACHED
+Eisenhower: Q1 — ACT IMMEDIATELY
+Runbook: [link] | Incident: [PagerDuty link]
+On-call: @[engineer]</code></pre>
+
+<p><strong>Q2 Alert Slack message:</strong></p>
+<pre><code>⚠️ Q2 DR Warning — [node_name] approaching SLA threshold
+RTO at [X]% of target ([Y]min / [Z]min)
+Blast radius: [N] nodes | Affects production: Yes
+Action required within 4 hours. Ticket: [link]</code></pre>
+
+<p><strong>Q3 Alert Slack message:</strong></p>
+<pre><code>🔔 Q3 DR Alert — [node_name] cascade in non-critical path
+Affected nodes: [N] | Production impact: No
+Escalation in 15 minutes if unresolved. Assign: @team</code></pre>
+
+</article>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Disaster Recovery Documentation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* HEADER */
+.site-header{padding:48px 40px 40px;border-bottom:1px solid var(--border);max-width:960px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:14px}
+.site-header h1{font-size:32px;font-weight:600;letter-spacing:-.025em;line-height:1.2;margin-bottom:12px}
+.site-header p{color:var(--text2);font-size:14px;max-width:560px}
+.badge-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.badge{background:var(--bg3);border:1px solid var(--border2);border-radius:4px;font-family:var(--mono);font-size:10px;padding:4px 10px;color:var(--text2)}
+.badge span{color:var(--text)}
+
+/* SEARCH */
+.search-wrap{max-width:960px;margin:0 auto;padding:28px 40px 0}
+.search-input{width:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:12px 16px;font-family:var(--sans);font-size:14px;color:var(--text);outline:none;transition:border .15s}
+.search-input:focus{border-color:var(--accent)}
+.search-input::placeholder{color:var(--text3)}
+
+/* MAIN */
+main{max-width:960px;margin:0 auto;padding:36px 40px 80px}
+
+/* SECTION */
+.section-title{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin:40px 0 16px}
+.section-title:first-child{margin-top:0}
+
+/* DOC GRID */
+.doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:8px}
+.doc-card{display:block;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;transition:border-color .15s,background .15s;text-decoration:none}
+.doc-card:hover{border-color:var(--border2);background:var(--bg3);text-decoration:none}
+.doc-card .tag{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
+.doc-card .tag.aws{color:var(--yellow)}
+.doc-card .tag.ops{color:var(--cyan)}
+.doc-card .tag.platform{color:var(--green)}
+.doc-card h3{font-size:14px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:8px}
+.doc-card p{font-size:12px;color:var(--text2);line-height:1.55}
+.doc-card .arrow{color:var(--text3);font-size:12px;margin-top:12px;transition:color .15s}
+.doc-card:hover .arrow{color:var(--accent)}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border);padding:24px 40px;max-width:960px;margin:0 auto;font-family:var(--mono);font-size:10px;color:var(--text3)}
+
+@media(max-width:640px){.site-header,.search-wrap,main,footer{padding-left:20px;padding-right:20px}.site-header h1{font-size:24px}.doc-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="site-header">
+  <div class="eyebrow">ATHENA · Disaster Recovery Platform</div>
+  <h1>DR Documentation</h1>
+  <p>Runbooks, operational guides, and reference material for the ATHENA disaster recovery simulation platform. Each page covers failure scenarios, detection commands, recovery steps, and monitoring.</p>
+  <div class="badge-row">
+    <div class="badge">18 <span>documents</span></div>
+    <div class="badge">Primary <span>us-east-1</span></div>
+    <div class="badge">DR <span>eu-west-1</span></div>
+    <div class="badge">RTO target <span>15 min</span></div>
+    <div class="badge">RPO target <span>5 min</span></div>
+  </div>
+</div>
+
+<div class="search-wrap">
+  <input class="search-input" type="text" id="search" placeholder="Filter docs…" autocomplete="off"/>
+</div>
+
+<main>
+
+  <div class="section-title">Architecture &amp; Platform</div>
+  <div class="doc-grid" data-section>
+    <a class="doc-card" href="architecture.html">
+      <div class="tag platform">Platform</div>
+      <h3>Architecture &amp; Disaster Recovery Overview</h3>
+      <p>Multi-region AWS deployment, component inventory, failure scenarios, and region failover playbook.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="rto-rpo-monitoring-guide.html">
+      <div class="tag platform">Platform</div>
+      <h3>RTO/RPO Monitoring &amp; Measurement Guide</h3>
+      <p>How ATHENA calculates effective RTO/RPO, measures actual recovery times, and detects SLA breaches.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="eisenhower-response-guide.html">
+      <div class="tag platform">Platform</div>
+      <h3>Eisenhower Response Guide</h3>
+      <p>Q1–Q4 classification of DR events, urgency/importance matrix, and prioritized response protocols.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="cascading-failure-patterns.html">
+      <div class="tag platform">Platform</div>
+      <h3>Cascading Failure Patterns</h3>
+      <p>Common cascade topologies, blast radius propagation, and containment strategies.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="recovery-strategies-guide.html">
+      <div class="tag platform">Platform</div>
+      <h3>Recovery Strategies Guide</h3>
+      <p>Comparison of replica_fallback, multi_az, stateless, and backup_fallback strategies with trade-offs.</p>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+
+  <div class="section-title">AWS Resource Runbooks</div>
+  <div class="doc-grid" data-section>
+    <a class="doc-card" href="aws-rds-aurora-dr-runbook.html">
+      <div class="tag aws">AWS · RDS</div>
+      <h3>AWS RDS Aurora DR Runbook</h3>
+      <p>Aurora failover, replica promotion, backup restore, and connection storm mitigation.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="aws-elasticache-redis-dr-runbook.html">
+      <div class="tag aws">AWS · ElastiCache</div>
+      <h3>AWS ElastiCache Redis DR Runbook</h3>
+      <p>Redis failover, replica promotion, cluster mode, and cross-region DR procedures.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="aws-alb-dr-runbook.html">
+      <div class="tag aws">AWS · ALB</div>
+      <h3>AWS Application Load Balancer DR Runbook</h3>
+      <p>Target group health, AZ outages, SSL certificate recovery, and Route53 failover integration.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="aws-ec2-asg-dr-runbook.html">
+      <div class="tag aws">AWS · EC2</div>
+      <h3>AWS EC2 / Auto Scaling Group DR Runbook</h3>
+      <p>Instance replacement, fleet failure recovery, AZ outage handling, and scaling events.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="aws-eks-kubernetes-dr-runbook.html">
+      <div class="tag aws">AWS · EKS</div>
+      <h3>AWS EKS / Kubernetes DR Runbook</h3>
+      <p>Worker node failure, node group recovery, control plane unavailability, and cross-region failover.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="aws-lambda-cloudfront-dr-runbook.html">
+      <div class="tag aws">AWS · Lambda</div>
+      <h3>AWS Lambda &amp; CloudFront DR Runbook</h3>
+      <p>Lambda throttling, cold start mitigation, CloudFront failover, and edge function recovery.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="aws-s3-sqs-dr-runbook.html">
+      <div class="tag aws">AWS · S3 / SQS</div>
+      <h3>AWS S3 &amp; SQS DR Runbook</h3>
+      <p>Object recovery, CRR failover, SQS consumer failure, and DLQ redrive procedures.</p>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+
+  <div class="section-title">Operational Guides</div>
+  <div class="doc-grid" data-section>
+    <a class="doc-card" href="dns-route53-failover.html">
+      <div class="tag ops">Operations</div>
+      <h3>DNS &amp; Route53 Failover Guide</h3>
+      <p>Health check configuration, failover routing policy, TTL management, and common DNS DR failures.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="database-connection-pool-management.html">
+      <div class="tag ops">Operations</div>
+      <h3>Database Connection Pool Management</h3>
+      <p>Connection storm prevention, RDS Proxy setup, SQLAlchemy/pg-pool config, and post-failover recovery.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="multi-region-failover-playbook.html">
+      <div class="tag ops">Operations</div>
+      <h3>Multi-Region Failover Playbook</h3>
+      <p>Step-by-step region failover for all services, decision tree, and rollback procedures.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="incident-command-postmortem.html">
+      <div class="tag ops">Operations</div>
+      <h3>Incident Command &amp; Post-Mortem</h3>
+      <p>Incident roles, communication templates, severity classification, and blameless post-mortem format.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="iam-secrets-ssm-prerequisites.html">
+      <div class="tag ops">Operations</div>
+      <h3>IAM, Secrets &amp; SSM Prerequisites</h3>
+      <p>Required IAM roles, Secrets Manager setup, SSM Parameter Store, and DR access prerequisites.</p>
+      <div class="arrow">→</div>
+    </a>
+    <a class="doc-card" href="backup-testing-chaos-procedures.html">
+      <div class="tag ops">Operations</div>
+      <h3>Backup Testing &amp; Chaos Procedures</h3>
+      <p>Scheduled backup validation, chaos engineering runbooks, game day procedures, and recovery drills.</p>
+      <div class="arrow">→</div>
+    </a>
+  </div>
+
+</main>
+
+<footer>ATHENA · Disaster Recovery Platform &nbsp;·&nbsp; 18 documents &nbsp;·&nbsp; Generated 2026-05-20</footer>
+
+<script>
+const input = document.getElementById('search');
+input.addEventListener('input', () => {
+  const q = input.value.toLowerCase();
+  document.querySelectorAll('.doc-card').forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = text.includes(q) ? '' : 'none';
+  });
+  document.querySelectorAll('[data-section]').forEach(section => {
+    const prev = section.previousElementSibling;
+    const visible = [...section.querySelectorAll('.doc-card')].some(c => c.style.display !== 'none');
+    if (prev && prev.classList.contains('section-title')) prev.style.display = visible ? '' : 'none';
+  });
+});
+</script>
+</body>
+</html>

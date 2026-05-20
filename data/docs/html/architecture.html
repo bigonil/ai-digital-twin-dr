@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Architecture &amp; Disaster Recovery Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* NAV */
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+
+/* HEADER */
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+
+/* CONTENT */
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+
+/* CODE */
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+
+/* TABLES */
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+
+/* BLOCKQUOTE / NOTE */
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+
+/* MOBILE */
+@media(max-width:640px){
+  nav,header,article{padding-left:20px;padding-right:20px}
+  h1{font-size:22px}
+  h2{font-size:17px}
+  pre{padding:14px;font-size:11px}
+}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Architecture &amp; Disaster Recovery Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Architecture &amp; Disaster Recovery Runbook</h1>
+  <p class="subtitle">A multi-region AWS deployment with primary in <code>us-east-1</code> (active) and DR in <code>eu-west-1</code> (warm standby). RTO target: <strong>15 minutes</strong>. RPO target: <strong>5 minutes</strong>.</p>
+</header>
+<article>
+
+<h2>Component Inventory</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Component</th><th>Type</th><th>Region</th><th>Redundancy</th></tr></thead>
+<tbody>
+<tr><td>app-alb</td><td>Application Load Balancer</td><td>us-east-1</td><td>Multi-AZ</td></tr>
+<tr><td>app-asg</td><td>Auto Scaling Group</td><td>us-east-1</td><td>2–10 instances</td></tr>
+<tr><td>app-postgres</td><td>Aurora PostgreSQL Cluster</td><td>us-east-1</td><td>3 AZ, 2 replicas</td></tr>
+<tr><td>app-redis</td><td>ElastiCache Redis</td><td>us-east-1</td><td>2 replicas + auto-failover</td></tr>
+<tr><td>app-data-primary</td><td>S3 Bucket</td><td>us-east-1</td><td>Cross-region replication</td></tr>
+<tr><td>app-data-replica</td><td>S3 Bucket (replica)</td><td>eu-west-1</td><td>Replica target</td></tr>
+<tr><td>app-jobs</td><td>SQS FIFO Queue</td><td>us-east-1</td><td>Managed, DLQ configured</td></tr>
+</tbody>
+</table></div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenarios &amp; Recovery Procedures</h2>
+
+<h3>Scenario 1: Database Primary Failure (Aurora)</h3>
+
+<p><strong>Symptoms</strong>: Application errors writing to DB, CloudWatch <code>DBInstanceNotAvailable</code> alarm.</p>
+
+<p><strong>Recovery Steps</strong>:</p>
+<ol>
+<li>Verify failure: <code>aws rds describe-db-cluster-members --db-cluster-identifier app-postgres</code></li>
+<li>Aurora auto-promotes replica in ~30s — monitor CloudWatch for failover completion</li>
+<li>Verify application can reconnect via cluster endpoint (endpoint does not change)</li>
+<li>If all replicas fail: restore from latest automated backup (last 7 days retention)</li>
+<li>Update application config if using instance endpoint (migrate to cluster endpoint)</li>
+</ol>
+
+<p><strong>RTO</strong>: 1–2 min (auto-failover) / 15 min (manual restore)<br>
+<strong>RPO</strong>: &lt; 1 min (replica lag)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h3>Scenario 2: Region Failure (us-east-1)</h3>
+
+<p><strong>Symptoms</strong>: All us-east-1 health checks fail, Route53 health check triggers DNS failover.</p>
+
+<p><strong>Recovery Steps</strong>:</p>
+<ol>
+<li>Confirm region failure via AWS Health Dashboard</li>
+<li>Activate DR region: verify <code>eu-west-1</code> resources are healthy</li>
+<li>Promote S3 replica: disable replication rules to make <code>app-data-replica</code> writable</li>
+<li>Point application to DR database (deploy Aurora in eu-west-1 from latest snapshot)</li>
+<li>Update Route53 health-check weights to route 100% traffic to eu-west-1</li>
+<li>Scale up ASG in eu-west-1 to full production capacity</li>
+<li>Notify on-call team and open incident ticket</li>
+</ol>
+
+<p><strong>RTO</strong>: 10–15 min<br>
+<strong>RPO</strong>: &lt; 5 min (S3 CRR replication lag)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h3>Scenario 3: Cache (Redis) Failure</h3>
+
+<p><strong>Symptoms</strong>: Latency spike, application logs show Redis connection timeouts.</p>
+
+<p><strong>Recovery Steps</strong>:</p>
+<ol>
+<li>Check ElastiCache replication group status:<br>
+<code>aws elasticache describe-replication-groups --replication-group-id app-redis</code></li>
+<li>ElastiCache auto-failover promotes a replica in ~30s</li>
+<li>If entire cluster fails: create new cluster from latest snapshot</li>
+<li>Application should use retry logic with exponential backoff (code-level)</li>
+</ol>
+
+<p><strong>RTO</strong>: 1 min (auto-failover) / 5 min (manual restore)<br>
+<strong>RPO</strong>: 0 (Redis persistence disabled, cache is ephemeral)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h3>Scenario 4: Message Queue Backlog (SQS)</h3>
+
+<p><strong>Symptoms</strong>: <code>app-jobs.fifo</code> depth growing, <code>app-jobs-dlq.fifo</code> receiving messages.</p>
+
+<p><strong>Recovery Steps</strong>:</p>
+<ol>
+<li>Identify failing consumer workers (check ASG instance health)</li>
+<li>Inspect DLQ messages for root cause: <code>aws sqs receive-message --queue-url &lt;dlq-url&gt;</code></li>
+<li>Fix underlying issue (code bug, dependency failure)</li>
+<li>Redrive DLQ messages back to main queue after fix is deployed</li>
+<li>Scale ASG temporarily to drain backlog faster</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics to monitor:</p>
+<ul>
+<li><code>RDS/CPUUtilization</code> &gt; 80%</li>
+<li><code>RDS/ReplicaLag</code> &gt; 30s</li>
+<li><code>ElastiCache/ReplicationLag</code> &gt; 5s</li>
+<li><code>ApplicationELB/HealthyHostCount</code> &lt; 2</li>
+<li><code>SQS/ApproximateNumberOfMessagesNotVisible</code> &gt; 1000</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Contact &amp; Escalation</h2>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Level</th><th>Contact</th><th>Response Time</th></tr></thead>
+<tbody>
+<tr><td>P1 (full outage)</td><td>on-call@company.com</td><td>5 min</td></tr>
+<tr><td>P2 (partial degradation)</td><td>team@company.com</td><td>15 min</td></tr>
+<tr><td>P3 (non-critical)</td><td>backlog ticket</td><td>Next business day</td></tr>
+</tbody>
+</table></div>
+
+</article>
+</body>
+</html>

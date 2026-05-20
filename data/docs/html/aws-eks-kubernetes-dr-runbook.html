@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — AWS EKS / Kubernetes DR Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{--bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;--accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}ul,ol{margin:0 0 16px 22px}li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+hr{border:none;border-top:1px solid var(--border);margin:32px 0}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>AWS EKS / Kubernetes DR Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>AWS EKS / Kubernetes — Disaster Recovery Runbook</h1>
+  <p class="subtitle">Resource type: <code>aws_eks_cluster</code> | Strategy: stateless, backup_fallback. RTO targets: 2–5 min (node replacement) | 15–30 min (cluster rebuild) | 5 min (pod rescheduling). RPO: 0 (stateless pods).</p>
+</header>
+<article>
+
+<h2>Overview</h2>
+<p>Amazon EKS clusters (<code>aws_eks_cluster</code>) run Kubernetes control planes managed by AWS across multiple AZs. Worker nodes run in managed node groups (EC2 Auto Scaling Groups). Kubernetes workloads are stateless by design — pods are ephemeral. State lives in Aurora, ElastiCache, or S3. EKS control plane has 99.95% SLA and auto-recovers; DR focuses on worker node failures and cluster-level recovery.</p>
+
+<hr>
+
+<h2>Failure Scenario: Worker Node Failure (stateless)</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Kubernetes: <code>kubectl get nodes</code> shows nodes in <code>NotReady</code> state</li>
+<li>Pods evicted and rescheduled on other nodes; some pods in <code>Pending</code> if cluster at capacity</li>
+<li>CloudWatch: <code>eks-worker/node_not_ready</code> alert</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>kubectl get nodes -o wide
+kubectl describe node &lt;node-name&gt; | grep -A 10 Conditions:
+kubectl get pods --all-namespaces | grep -v Running | grep -v Completed
+
+# Check node group health via AWS
+aws eks describe-nodegroup \
+  --cluster-name app-cluster \
+  --nodegroup-name app-nodegroup \
+  --query 'nodegroup.{Status:status,Health:health,ScalingConfig:scalingConfig}'</code></pre>
+
+<p><strong>Recovery Steps — stateless (auto):</strong></p>
+<ol>
+<li>Kubernetes detects node failure via kubelet heartbeat (40-second timeout)</li>
+<li>Node marked <code>NotReady</code>; pods evicted after <code>pod-eviction-timeout</code> (default 5 minutes)</li>
+<li>ASG replaces failed EC2 node automatically</li>
+<li>New node joins cluster and receives rescheduled pods</li>
+<li>Monitor: <code>kubectl get pods --all-namespaces -w</code> — all pods return to <code>Running</code></li>
+</ol>
+
+<p><strong>Recovery Steps — stateless (manual accelerated):</strong></p>
+<pre><code># Cordon node to prevent new pod scheduling
+kubectl cordon &lt;node-name&gt;
+
+# Drain existing pods safely
+kubectl drain &lt;node-name&gt; \
+  --ignore-daemonsets \
+  --delete-emptydir-data \
+  --grace-period=30
+
+# Terminate underlying EC2 instance (ASG replaces it)
+NODE_INSTANCE=$(kubectl get node &lt;node-name&gt; -o jsonpath='{.spec.providerID}' | cut -d/ -f5)
+aws ec2 terminate-instances --instance-ids $NODE_INSTANCE</code></pre>
+
+<p><strong>Verification:</strong> All pods <code>Running</code>, all nodes <code>Ready</code>. Check: <code>kubectl get pods -A | grep -v Running | grep -v Completed | wc -l</code> → 0.</p>
+
+<hr>
+
+<h2>Failure Scenario: Full Node Group Failure</h2>
+
+<p><strong>Symptoms:</strong> All worker nodes <code>NotReady</code>; all pods <code>Pending</code>; services return 503.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Check node group status:
+<pre><code>aws eks describe-nodegroup \
+  --cluster-name app-cluster \
+  --nodegroup-name app-nodegroup</code></pre>
+</li>
+<li>Check ASG health — are replacement nodes launching?
+<pre><code>aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-name &lt;asg-name&gt; \
+  --query 'AutoScalingGroups[0].Instances[*].{Id:InstanceId,State:LifecycleState,Health:HealthStatus}'</code></pre>
+</li>
+<li>If nodes launch but fail to join: check node IAM role and EKS auth config:
+<pre><code>kubectl -n kube-system get configmap aws-auth -o yaml</code></pre>
+</li>
+<li>Force node group update to refresh all nodes:
+<pre><code>aws eks update-nodegroup-version \
+  --cluster-name app-cluster \
+  --nodegroup-name app-nodegroup \
+  --force</code></pre>
+</li>
+<li>Scale node group up temporarily if capacity is insufficient:
+<pre><code>aws eks update-nodegroup-config \
+  --cluster-name app-cluster \
+  --nodegroup-name app-nodegroup \
+  --scaling-config minSize=3,maxSize=10,desiredSize=6</code></pre>
+</li>
+</ol>
+
+<hr>
+
+<h2>Failure Scenario: EKS Control Plane Unavailable</h2>
+
+<p><strong>Symptoms:</strong> <code>kubectl</code> commands time out; API server unreachable. Worker nodes continue running existing pods (Kubernetes graceful degradation).</p>
+
+<blockquote>EKS control plane is AWS-managed and runs across 3 AZs. True control plane failure is rare (covered by AWS SLA). Running workloads continue without API server.</blockquote>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Verify: <code>aws eks describe-cluster --name app-cluster --query 'cluster.{Status:status,Endpoint:endpoint}'</code></li>
+<li>Check AWS Health Dashboard for EKS service events in affected region</li>
+<li>If control plane endpoint is unreachable, open AWS Support case (P1)</li>
+<li>Existing pods continue serving traffic — do NOT restart them</li>
+<li>Deploy no new changes until control plane recovers (cannot validate)</li>
+<li>Expected RTO: 5–60 minutes (AWS-managed recovery)</li>
+</ol>
+
+<hr>
+
+<h2>Failure Scenario: DR Region Failover (us-east-1 → eu-west-1)</h2>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Verify eu-west-1 cluster exists and node group is healthy:
+<pre><code>aws eks describe-cluster --name app-cluster-dr --region eu-west-1
+kubectl --context=arn:aws:eks:eu-west-1:&lt;account&gt;:cluster/app-cluster-dr get nodes</code></pre>
+</li>
+<li>Scale up DR node group to production capacity:
+<pre><code>aws eks update-nodegroup-config \
+  --cluster-name app-cluster-dr \
+  --nodegroup-name app-nodegroup-dr \
+  --scaling-config desiredSize=6 \
+  --region eu-west-1</code></pre>
+</li>
+<li>Update Route53 to route traffic to eu-west-1 ALB (in front of EKS ingress)</li>
+<li>Verify application deployments are running in DR cluster:
+<pre><code>kubectl --context=app-cluster-dr get deployments --all-namespaces</code></pre>
+</li>
+<li>Update ConfigMaps with eu-west-1 database endpoints (Aurora, Redis)</li>
+<li>Validate health endpoints return 200</li>
+</ol>
+
+<hr>
+
+<h2>Kubernetes-Specific Monitoring</h2>
+
+<p>Key metrics via CloudWatch Container Insights:</p>
+<ul>
+<li><code>container_cpu_utilization</code> — alert at &gt; 80% per container</li>
+<li><code>container_memory_utilization</code> — alert at &gt; 85% per container</li>
+<li><code>node_cpu_utilization</code> — alert at &gt; 75% (cluster capacity pressure)</li>
+<li><code>node_memory_utilization</code> — alert at &gt; 80%</li>
+<li><code>pod_number_of_container_restarts</code> — alert at &gt; 5 restarts in 10 min (crash loop)</li>
+<li><code>cluster_node_count</code> — alert at &lt; min_size</li>
+<li><code>cluster_failed_node_count</code> — alert at &gt; 0</li>
+</ul>
+
+<pre><code>aws eks update-cluster-config \
+  --name app-cluster \
+  --logging '{"clusterLogging":[{"types":["api","audit","authenticator","controllerManager","scheduler"],"enabled":true}]}'</code></pre>
+
+<hr>
+
+<h2>Cascading Failure Risk</h2>
+
+<p>EKS worker failure cascades to:</p>
+<ol>
+<li><strong>ALB (aws_lb)</strong> — if all EKS pods crash, ALB ingress returns 503</li>
+<li><strong>Aurora (aws_rds_cluster)</strong> — pending pod restarts create connection storm on DB pool</li>
+<li><strong>ElastiCache</strong> — Redis connection pool recreated for each new pod launch</li>
+</ol>
+
+<p>Mitigation: <code>PodDisruptionBudget</code> ensures minimum replicas during node drain:</p>
+<pre><code>apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: app-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: app-server</code></pre>
+
+</article>
+</body>
+</html>

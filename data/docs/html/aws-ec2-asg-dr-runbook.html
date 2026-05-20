@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — AWS EC2 / Auto Scaling Group — Disaster Recovery Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* NAV */
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+
+/* HEADER */
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+
+/* CONTENT */
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+
+/* CODE */
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+
+/* TABLES */
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+
+/* BLOCKQUOTE / NOTE */
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+
+/* MOBILE */
+@media(max-width:640px){
+  nav,header,article{padding-left:20px;padding-right:20px}
+  h1{font-size:22px}
+  h2{font-size:17px}
+  pre{padding:14px;font-size:11px}
+}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>AWS EC2 / Auto Scaling Group — Disaster Recovery Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>AWS EC2 / Auto Scaling Group — Disaster Recovery Runbook</h1>
+  <p class="subtitle">Resource Type: <code>aws_instance</code> | Strategy: stateless, backup_fallback. ASGs automatically replace unhealthy instances within 1–5 minutes. All application state is external (Aurora, Redis, S3).</p>
+</header>
+<article>
+
+<h2>Overview</h2>
+
+<p>Auto Scaling Groups (ASG) manage fleets of EC2 instances (<code>aws_instance</code>) for stateless application workloads. ASGs automatically replace unhealthy instances within 1–5 minutes. All application state is external (Aurora, Redis, S3). Instance termination is non-destructive for stateless services.</p>
+
+<p>RTO targets: 1–3 min (ASG self-healing) | 5–10 min (manual intervention) | 15 min (full fleet rebuild)<br>
+RPO: 0 (stateless — no data stored on instances)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Single Instance Failure (stateless)</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>ALB health check fails for one target (<code>HealthyHostCount</code> drops by 1)</li>
+<li>EC2 instance shows <code>impaired</code> in CloudWatch Instance Status Check</li>
+<li>Application logs: connection refused on specific instance IP</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names app-asg \
+  --query 'AutoScalingGroups[0].{Desired:DesiredCapacity,InService:Instances[?LifecycleState==`InService`]|length(@),Min:MinSize,Max:MaxSize}'
+
+aws elbv2 describe-target-health \
+  --target-group-arn &lt;target-group-arn&gt; \
+  --query 'TargetHealthDescriptions[*].{Id:Target.Id,State:TargetHealth.State,Reason:TargetHealth.Reason}'</code></pre>
+
+<p><strong>Recovery Steps — stateless (auto):</strong></p>
+<ol>
+<li>ASG detects instance failure via EC2 health checks (every 300 seconds by default)</li>
+<li>ASG terminates unhealthy instance and launches replacement automatically</li>
+<li>New instance registers with ALB and passes health check (30–120 second warmup)</li>
+<li>Monitor: <code>aws autoscaling describe-scaling-activities --auto-scaling-group-name app-asg</code></li>
+</ol>
+
+<p><strong>Recovery Steps — stateless (manual accelerated):</strong></p>
+<ol>
+<li>Manually terminate unhealthy instance to trigger immediate replacement:
+<pre><code>aws ec2 terminate-instances --instance-ids &lt;instance-id&gt;</code></pre></li>
+<li>Force ASG to refresh all instances with latest launch template:
+<pre><code>aws autoscaling start-instance-refresh \
+  --auto-scaling-group-name app-asg \
+  --preferences '{"MinHealthyPercentage":80,"InstanceWarmup":120}'</code></pre></li>
+<li>Monitor refresh: <code>aws autoscaling describe-instance-refreshes --auto-scaling-group-name app-asg</code></li>
+</ol>
+
+<p><strong>Verification:</strong> <code>aws elbv2 describe-target-health</code> shows all registered targets as <code>healthy</code>.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Full Fleet Failure (stateless)</h2>
+
+<p><strong>Symptoms:</strong> ALB <code>HealthyHostCount</code> = 0; all application requests return 503.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Check ASG desired vs running:
+<pre><code>aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names app-asg \
+  --query 'AutoScalingGroups[0].{Desired:DesiredCapacity,Running:Instances|length(@)}'</code></pre></li>
+<li>Check EC2 launch template for misconfigurations:
+<pre><code>aws ec2 describe-launch-template-versions \
+  --launch-template-name app-server-lt \
+  --versions '$Latest'</code></pre></li>
+<li>Check if instances are launching but failing health checks:
+<pre><code>aws ec2 get-console-output --instance-id &lt;new-instance-id&gt;</code></pre></li>
+<li>If AMI is broken, revert to last known good AMI:
+<pre><code>aws autoscaling create-launch-template-version \
+  --launch-template-id &lt;lt-id&gt; \
+  --source-version &lt;last-good-version&gt;
+aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name app-asg \
+  --launch-template LaunchTemplateId=&lt;lt-id&gt;,Version='$Latest'</code></pre></li>
+<li>Manually set desired capacity to trigger immediate launches:
+<pre><code>aws autoscaling set-desired-capacity \
+  --auto-scaling-group-name app-asg \
+  --desired-capacity 3</code></pre></li>
+<li>Expected RTO: 5–10 minutes from root cause identification</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: AZ Outage</h2>
+
+<p><strong>Symptoms:</strong> Instances in one AZ fail; ASG <code>AvailabilityZoneRebalancing</code> alarms.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Temporarily remove failed AZ from ASG:
+<pre><code>aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name app-asg \
+  --availability-zones us-east-1b us-east-1c</code></pre></li>
+<li>Increase desired capacity to compensate for reduced AZs:
+<pre><code>aws autoscaling set-desired-capacity \
+  --auto-scaling-group-name app-asg \
+  --desired-capacity 4</code></pre></li>
+<li>Monitor <code>HealthyHostCount</code> recovers to ≥ 2 in remaining AZs</li>
+<li>When AZ recovers, re-add it and rebalance: <code>aws autoscaling update-auto-scaling-group --availability-zones us-east-1a us-east-1b us-east-1c</code></li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Scaling Events &amp; Blast Radius</h2>
+
+<p>When EC2/ASG fails, cascading impact:</p>
+<ol>
+<li><strong>ALB (aws_lb)</strong> — reduced capacity; latency increases; if all instances unhealthy, ALB returns 503 to all clients</li>
+<li><strong>Aurora (aws_rds_cluster)</strong> — connection count drops to 0 then spikes when new instances launch (connection storm)</li>
+<li><strong>SQS consumers</strong> — job processing stops; queue depth grows; DLQ starts receiving messages after visibility timeout</li>
+</ol>
+
+<p>Mitigation:</p>
+<ul>
+<li>Pre-warm connection pools with <code>max_connections</code> limits per instance</li>
+<li>Set <code>MinHealthyPercentage = 80</code> in instance refresh to maintain minimum capacity</li>
+<li>SQS consumers: set <code>VisibilityTimeout</code> to <code>MaxProcessingTime × 1.5</code></li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_instance</code> / ASG:</p>
+<ul>
+<li><code>AWS/AutoScaling/GroupInServiceInstances</code> — alert at &lt; 2 (below minimum redundancy)</li>
+<li><code>AWS/EC2/CPUUtilization</code> — alert at &gt; 80% for 10 minutes (capacity pressure)</li>
+<li><code>AWS/EC2/StatusCheckFailed</code> — alert immediately (hardware failure indicator)</li>
+<li><code>AWS/ApplicationELB/HealthyHostCount</code> — alert at &lt; 2</li>
+<li><code>AWS/ApplicationELB/HTTPCode_Target_5XX_Count</code> — alert at &gt; 50/min</li>
+<li><code>AWS/ApplicationELB/TargetResponseTime</code> — alert at p95 &gt; 2 seconds</li>
+</ul>
+
+<p>CloudWatch alarm for minimum fleet size:</p>
+<pre><code>aws cloudwatch put-metric-alarm \
+  --alarm-name asg-below-minimum-healthy \
+  --metric-name GroupInServiceInstances \
+  --namespace AWS/AutoScaling \
+  --statistic Minimum \
+  --period 60 \
+  --threshold 2 \
+  --comparison-operator LessThanThreshold \
+  --evaluation-periods 2 \
+  --dimensions Name=AutoScalingGroupName,Value=app-asg</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Instance Replacement Verification Checklist</h2>
+
+<p>After ASG replaces instances:</p>
+<ul>
+<li>New instance passes EC2 Status Checks (System + Instance)</li>
+<li>ALB target shows <code>healthy</code> within 2 minutes of launch</li>
+<li>Application startup logs show no errors (check CloudWatch Logs <code>/app/startup</code>)</li>
+<li>Metrics: CPU &lt; 50%, memory &lt; 70%, error rate &lt; 0.1%</li>
+<li>Redis connection established (check app log for "Connected to Redis")</li>
+<li>Aurora connection established (check app log for "DB pool ready")</li>
+</ul>
+
+</article>
+</body>
+</html>

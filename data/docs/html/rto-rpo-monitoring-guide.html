@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — RTO/RPO Monitoring &amp; Measurement Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{--bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;--accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}ul,ol{margin:0 0 16px 22px}li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+hr{border:none;border-top:1px solid var(--border);margin:32px 0}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>RTO/RPO Monitoring &amp; Measurement Guide</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>RTO/RPO Monitoring &amp; Measurement Guide</h1>
+  <p class="subtitle">How ATHENA calculates effective RTO/RPO per node, measures actual recovery times in production, and detects SLA breaches via the compliance audit endpoint.</p>
+</header>
+<article>
+
+<h2>Definitions</h2>
+
+<p><strong>RTO (Recovery Time Objective):</strong> The maximum acceptable downtime from failure detection to full service restoration. Measured in minutes. Stored as <code>rto_minutes</code> on each Neo4j <code>InfraNode</code>.</p>
+
+<p><strong>RPO (Recovery Point Objective):</strong> The maximum acceptable data loss, expressed as time. A 5-minute RPO means at most 5 minutes of data can be lost. Stored as <code>rpo_minutes</code> on each Neo4j <code>InfraNode</code>.</p>
+
+<p><strong>Effective RTO:</strong> ATHENA calculates effective RTO per node factoring in recovery strategy:</p>
+<ul>
+<li><code>replica_fallback</code>: effective_rto = base_rto × 0.5 (fast replica promotion)</li>
+<li><code>multi_az</code>: effective_rto = base_rto × 0.3 (AWS-managed, very fast)</li>
+<li><code>stateless</code>: effective_rto = base_rto × 0.4 (ASG self-healing)</li>
+<li><code>backup_fallback</code>: effective_rto = base_rto × 2.0 (slow restore)</li>
+<li><code>generic</code>: effective_rto = base_rto × 1.0 (no improvement assumed)</li>
+</ul>
+
+<p><strong>Worst-case RTO/RPO:</strong> <code>max(effective_rto for all nodes in blast_radius)</code> — this is what ATHENA reports and compares against targets for Eisenhower classification.</p>
+
+<hr>
+
+<h2>RTO/RPO Targets by Node Type</h2>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Node Type</th><th>Base RTO (min)</th><th>Base RPO (min)</th><th>Recommended Strategy</th></tr></thead>
+<tbody>
+<tr><td>aws_rds_cluster (Aurora)</td><td>15</td><td>1</td><td>replica_fallback</td></tr>
+<tr><td>aws_db_instance (RDS Multi-AZ)</td><td>5</td><td>5</td><td>multi_az</td></tr>
+<tr><td>aws_elasticache_cluster</td><td>5</td><td>0</td><td>replica_fallback</td></tr>
+<tr><td>aws_lb (ALB)</td><td>1</td><td>0</td><td>multi_az</td></tr>
+<tr><td>aws_instance (EC2/ASG)</td><td>5</td><td>0</td><td>stateless</td></tr>
+<tr><td>aws_s3_bucket (with CRR)</td><td>15</td><td>15</td><td>replica_fallback</td></tr>
+<tr><td>aws_s3_bucket (no CRR)</td><td>60</td><td>240</td><td>backup_fallback</td></tr>
+<tr><td>aws_sqs_queue</td><td>2</td><td>0</td><td>stateless</td></tr>
+<tr><td>aws_eks_cluster</td><td>10</td><td>0</td><td>stateless</td></tr>
+<tr><td>aws_lambda_function</td><td>1</td><td>0</td><td>stateless</td></tr>
+</tbody>
+</table></div>
+
+<hr>
+
+<h2>Measuring Actual RTO in Production</h2>
+
+<h3>Automated RTO Measurement with CloudWatch</h3>
+<pre><code>aws cloudwatch put-composite-alarm \
+  --alarm-name actual-rto-tracker \
+  --alarm-rule "ALARM(db-failure-detected) AND OK(db-healthy-again)" \
+  --actions-enabled</code></pre>
+
+<h3>Manual RTO Measurement for Post-Mortem</h3>
+<p>Collect these timestamps for each incident:</p>
+<ol>
+<li><code>T_failure</code> — first alarm fires (or first user report)</li>
+<li><code>T_detected</code> — on-call acknowledges and confirms failure</li>
+<li><code>T_action</code> — first recovery action taken</li>
+<li><code>T_partial</code> — service partially restored (some users can access)</li>
+<li><code>T_full</code> — full service restoration, all health checks green</li>
+</ol>
+<p><strong>Actual RTO = T_full − T_failure</strong><br>
+<strong>Detection delay = T_detected − T_failure</strong> (target: &lt; 2 minutes with CloudWatch alarms)</p>
+
+<hr>
+
+<h2>Measuring Actual RPO in Production</h2>
+
+<h3>For Aurora/RDS</h3>
+<pre><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name AuroraReplicaLag \
+  --dimensions Name=DBClusterIdentifier,Value=app-postgres \
+  --start-time &lt;T_failure - 5 min&gt; \
+  --end-time &lt;T_failure&gt; \
+  --period 60 --statistics Maximum \
+  --output text</code></pre>
+<p>The maximum lag at <code>T_failure</code> = actual RPO for replica_fallback scenarios.</p>
+
+<h3>For ElastiCache Redis</h3>
+<pre><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/ElastiCache \
+  --metric-name ReplicationLag \
+  --dimensions Name=ReplicationGroupId,Value=app-redis \
+  --start-time &lt;T_failure - 5 min&gt; \
+  --end-time &lt;T_failure&gt; \
+  --period 60 --statistics Maximum</code></pre>
+
+<h3>For S3 (CRR)</h3>
+<pre><code>aws s3api get-bucket-replication --bucket app-data-primary-&lt;account&gt;
+# Check ReplicationTime for SLA-backed replication (S3 RTC)</code></pre>
+
+<hr>
+
+<h2>CloudWatch Dashboard for RTO/RPO Tracking</h2>
+
+<h3>Widget 1: Replication Lag (live RPO proxy)</h3>
+<pre><code>{
+  "type": "metric",
+  "properties": {
+    "metrics": [
+      ["AWS/RDS", "AuroraReplicaLag", "DBClusterIdentifier", "app-postgres"],
+      ["AWS/ElastiCache", "ReplicationLag", "ReplicationGroupId", "app-redis"]
+    ],
+    "period": 60,
+    "stat": "Maximum",
+    "title": "Live Replication Lag (RPO proxy)"
+  }
+}</code></pre>
+
+<h3>Widget 2: Recovery Readiness</h3>
+<pre><code>{
+  "type": "metric",
+  "properties": {
+    "metrics": [
+      ["AWS/RDS", "DatabaseConnections", "DBClusterIdentifier", "app-postgres"],
+      ["AWS/ElastiCache", "CacheHitRatio", "ReplicationGroupId", "app-redis"],
+      ["AWS/ApplicationELB", "HealthyHostCount", "LoadBalancer", "app/app-alb/&lt;id&gt;"]
+    ],
+    "title": "Recovery Readiness Indicators"
+  }
+}</code></pre>
+
+<hr>
+
+<h2>Compliance Audit: RTO/RPO Breach Detection</h2>
+
+<p>ATHENA's <code>/api/compliance</code> endpoint runs automated audits:</p>
+<pre><code>curl -X POST http://localhost:8001/api/compliance/audit \
+  -H "Content-Type: application/json" \
+  -d '{"rto_target_minutes": 60, "rpo_target_minutes": 15}'</code></pre>
+
+<p>Response includes:</p>
+<ul>
+<li><code>compliant_nodes</code>: nodes where effective_rto &lt; target and effective_rpo &lt; target</li>
+<li><code>warning_nodes</code>: effective_rto is 70–100% of target (URGENCY_RATIO_WARN threshold)</li>
+<li><code>breach_nodes</code>: effective_rto &gt; target (immediate Q1 escalation)</li>
+</ul>
+<p>Recommended schedule: run compliance audit every 15 minutes in production, hourly in staging.</p>
+
+<hr>
+
+<h2>RTO/RPO Improvement Recommendations</h2>
+
+<h3>To reduce RTO:</h3>
+<ol>
+<li><strong>Upgrade <code>backup_fallback</code> to <code>replica_fallback</code>:</strong> Add read replica to single-AZ RDS instances</li>
+<li><strong>Enable Multi-AZ on Aurora clusters:</strong> Reduces failover time from 120s to 30s</li>
+<li><strong>Pre-warm ASG instances:</strong> Keep warm pool to reduce cold-start time</li>
+<li><strong>Use RDS Proxy:</strong> Reduces connection storm after DB failover from 120s to &lt; 30s</li>
+<li><strong>Enable ElastiCache auto-failover:</strong> Reduces Redis RTO from 5–10 min to &lt; 1 min</li>
+</ol>
+
+<h3>To reduce RPO:</h3>
+<ol>
+<li><strong>Increase Aurora backup frequency:</strong> Enable continuous backup (Aurora default)</li>
+<li><strong>Enable S3 Replication Time Control (RTC):</strong> Guarantees 99.99% of objects replicated in 15 minutes</li>
+<li><strong>Reduce ElastiCache sync interval:</strong> Use <code>appendfsync always</code> for Redis persistence</li>
+<li><strong>Enable Aurora Global Database:</strong> RPO &lt; 1 second for cross-region writes</li>
+</ol>
+
+<hr>
+
+<h2>Monitoring Alarm Reference</h2>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Alarm Name</th><th>Metric</th><th>Threshold</th><th>Impact</th></tr></thead>
+<tbody>
+<tr><td><code>aurora-replica-lag-rpo-warn</code></td><td>RDS/AuroraReplicaLag</td><td>&gt; 60s</td><td>RPO warning</td></tr>
+<tr><td><code>aurora-replica-lag-rpo-breach</code></td><td>RDS/AuroraReplicaLag</td><td>&gt; 300s</td><td>RPO breached</td></tr>
+<tr><td><code>redis-lag-rpo-warn</code></td><td>ElastiCache/ReplicationLag</td><td>&gt; 10s</td><td>RPO warning</td></tr>
+<tr><td><code>alb-healthy-host-rto-warn</code></td><td>ALB/HealthyHostCount</td><td>&lt; 2</td><td>RTO risk</td></tr>
+<tr><td><code>alb-healthy-host-rto-breach</code></td><td>ALB/HealthyHostCount</td><td>&lt; 1</td><td>RTO breached</td></tr>
+<tr><td><code>asg-below-minimum</code></td><td>AutoScaling/GroupInServiceInstances</td><td>&lt; 2</td><td>RTO risk</td></tr>
+<tr><td><code>aurora-connections-zero</code></td><td>RDS/DatabaseConnections</td><td>= 0</td><td>RTO breached</td></tr>
+</tbody>
+</table></div>
+
+<hr>
+
+<h2>Incident Retrospective: RTO/RPO Accuracy</h2>
+
+<p>After each incident, record in post-mortem:</p>
+<ul>
+<li><strong>Predicted RTO</strong> (from ATHENA simulation before incident): <code>X</code> minutes</li>
+<li><strong>Actual RTO</strong> (from incident timeline): <code>Y</code> minutes</li>
+<li><strong>Prediction error:</strong> <code>(Y - X) / X × 100%</code></li>
+<li><strong>Predicted RPO</strong> vs <strong>Actual data loss</strong></li>
+</ul>
+<p>Target prediction accuracy: ± 20% for RTO, ± 50% for RPO. Update Neo4j <code>rto_minutes</code> / <code>rpo_minutes</code> on affected nodes if systematic bias detected.</p>
+
+</article>
+</body>
+</html>

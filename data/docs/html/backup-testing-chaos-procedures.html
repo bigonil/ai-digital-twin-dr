@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Backup Testing &amp; Chaos Engineering Procedures</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Backup Testing &amp; Chaos Engineering Procedures</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Backup Testing &amp; Chaos Engineering Procedures</h1>
+  <p class="subtitle">Untested backups are not backups. Untested runbooks fail under pressure. Monthly backup validation, chaos engineering test procedures, and DR readiness criteria — every result logged in the ATHENA postmortem system.</p>
+</header>
+<article>
+
+<h2>Backup Validation Schedule</h2>
+
+<h3>Monthly Tests (first Tuesday of each month, 10:00 UTC)</h3>
+
+<p><strong>Test 1: Aurora Snapshot Restore</strong></p>
+<pre><code># Find latest automated snapshot
+SNAPSHOT=$(aws rds describe-db-cluster-snapshots \
+  --db-cluster-identifier app-postgres \
+  --snapshot-type automated \
+  --query 'sort_by(DBClusterSnapshots,&amp;SnapshotCreateTime)[-1].DBClusterSnapshotIdentifier' \
+  --output text)
+
+# Restore to validation cluster
+aws rds restore-db-cluster-from-snapshot \
+  --db-cluster-identifier backup-validation-$(date +%Y%m%d) \
+  --snapshot-identifier $SNAPSHOT \
+  --engine aurora-postgresql \
+  --engine-version 15.4 \
+  --db-subnet-group-name &lt;subnet-group&gt; \
+  --vpc-security-group-ids &lt;sg-id&gt; \
+  --no-deletion-protection
+
+# Add writer instance
+aws rds create-db-instance \
+  --db-instance-identifier backup-validation-writer-$(date +%Y%m%d) \
+  --db-cluster-identifier backup-validation-$(date +%Y%m%d) \
+  --db-instance-class db.t3.medium \
+  --engine aurora-postgresql
+
+# Wait for available state (~15-20 min)
+aws rds wait db-instance-available \
+  --db-instance-identifier backup-validation-writer-$(date +%Y%m%d)
+
+# Validate data integrity
+ENDPOINT=$(aws rds describe-db-clusters \
+  --db-cluster-identifier backup-validation-$(date +%Y%m%d) \
+  --query 'DBClusters[0].Endpoint' --output text)
+
+psql -h $ENDPOINT -U admin -d appdb &lt;&lt; 'SQL'
+  SELECT 'row_count' AS check, COUNT(*) AS value FROM critical_table
+  UNION ALL
+  SELECT 'max_id', MAX(id) FROM critical_table
+  UNION ALL
+  SELECT 'latest_created', EXTRACT(EPOCH FROM MAX(created_at))::bigint FROM critical_table;
+SQL
+
+# Clean up after validation
+aws rds delete-db-instance \
+  --db-instance-identifier backup-validation-writer-$(date +%Y%m%d) \
+  --skip-final-snapshot
+
+aws rds delete-db-cluster \
+  --db-cluster-identifier backup-validation-$(date +%Y%m%d) \
+  --skip-final-snapshot</code></pre>
+
+<p><strong>Record results:</strong> <code>POST /api/postmortem</code> with <code>test_type=backup_validation</code>, <code>rto_minutes=&lt;actual&gt;</code>, <code>data_loss=&lt;rows_missing&gt;</code>.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<p><strong>Test 2: ElastiCache Snapshot Restore</strong></p>
+<pre><code># Create manual snapshot before test
+aws elasticache create-snapshot \
+  --replication-group-id app-redis \
+  --snapshot-name manual-validation-$(date +%Y%m%d)
+
+# Restore to validation cluster
+aws elasticache create-replication-group \
+  --replication-group-id redis-validation-$(date +%Y%m%d) \
+  --replication-group-description "Backup validation" \
+  --snapshot-name manual-validation-$(date +%Y%m%d) \
+  --cache-node-type cache.t3.micro \
+  --num-node-groups 1 --replicas-per-node-group 0
+
+# Validate key count
+redis-cli -h &lt;validation-endpoint&gt; DBSIZE
+
+# Clean up
+aws elasticache delete-replication-group \
+  --replication-group-id redis-validation-$(date +%Y%m%d) \
+  --retain-primary-cluster false</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<p><strong>Test 3: S3 Cross-Region Replication Lag</strong></p>
+<pre><code># Write test object to primary with timestamp
+TEST_KEY="dr-test/$(date +%s).json"
+aws s3 cp - s3://app-data-primary-&lt;account&gt;/$TEST_KEY \
+  &lt;&lt;&lt; "{\"written_at\": \"$(date -u +%FT%TZ)\", \"test\": true}"
+
+# Poll replica until object appears
+START=$(date +%s)
+while ! aws s3 ls s3://app-data-replica-&lt;account&gt;/$TEST_KEY --region eu-west-1 &gt; /dev/null 2&gt;&amp;1; do
+  sleep 5
+done
+ELAPSED=$(( $(date +%s) - START ))
+echo "S3 CRR lag: ${ELAPSED} seconds"
+
+# Cleanup
+aws s3 rm s3://app-data-primary-&lt;account&gt;/$TEST_KEY</code></pre>
+
+<p><strong>Pass criteria:</strong> S3 CRR lag &lt; 300 seconds (5 minutes).</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Quarterly DR Drill (full regional failover test)</h2>
+
+<p><strong>Scope:</strong> Complete failover test from us-east-1 to eu-west-1 during low-traffic window (Sunday 02:00 UTC).</p>
+<p><strong>Duration:</strong> 2 hours (60 min drill + 60 min failback)</p>
+
+<p><strong>Procedure:</strong></p>
+<ol>
+  <li>Notify customers 48 hours in advance (maintenance window)</li>
+  <li>Set status page to "Scheduled Maintenance"</li>
+  <li>Execute <code>multi-region-failover-playbook.md</code> Phase 0–6 verbatim</li>
+  <li>Validate all health checks in eu-west-1 for 15 minutes</li>
+  <li>Execute failback procedure (eu-west-1 → us-east-1)</li>
+  <li>Confirm all traffic back in us-east-1</li>
+  <li>Log actual RTO, RPO, and any deviations from expected runbook steps</li>
+</ol>
+
+<p><strong>Pass criteria:</strong></p>
+<ul>
+  <li>RTO &lt; 15 minutes (Phase 0 decision → Phase 6 validation complete)</li>
+  <li>RPO &lt; 5 minutes (Aurora Global DB lag at failover time)</li>
+  <li>Zero data loss confirmed by row count comparison</li>
+  <li>All ATHENA simulations run during drill show Q1/Q2 classification correctly</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Chaos Engineering Tests</h2>
+
+<h3>Test 1: Aurora Failover Simulation</h3>
+
+<p><strong>ATHENA setup:</strong></p>
+<pre><code># Simulate from ATHENA (marks nodes as simulated_failure in Neo4j)
+curl -X POST http://localhost:8001/api/dr/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"node_id": "app-postgres", "depth": 5, "include_monitoring": true}'
+
+# Note: eisenhower_quadrant, worst_case_rto_minutes, blast_radius from response</code></pre>
+
+<p><strong>Actual test execution (in non-production or during maintenance):</strong></p>
+<pre><code>aws rds failover-db-cluster --db-cluster-identifier app-postgres
+
+# Measure actual recovery time
+START=$(date +%s)
+while ! aws rds describe-db-clusters \
+  --db-cluster-identifier app-postgres \
+  --query 'DBClusters[0].Status' --output text | grep -q "available"; do
+  sleep 5
+done
+ACTUAL_RTO=$(( $(date +%s) - START ))
+echo "Actual DB failover RTO: ${ACTUAL_RTO}s"</code></pre>
+
+<p><strong>Compare with ATHENA prediction:</strong></p>
+<pre><code># ATHENA predicted RTO x 60 (minutes → seconds)
+PREDICTED_RTO=$(curl -s http://localhost:8001/api/dr/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"node_id": "app-postgres", "depth": 1}' | \
+  jq '.worst_case_rto_minutes * 60')
+
+echo "Predicted: ${PREDICTED_RTO}s | Actual: ${ACTUAL_RTO}s | Delta: $(( ACTUAL_RTO - PREDICTED_RTO ))s"</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h3>Test 2: ASG Instance Termination (stateless)</h3>
+
+<pre><code># Terminate one instance in ASG
+INSTANCE=$(aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-name app-asg \
+  --query 'AutoScalingGroups[0].Instances[0].InstanceId' --output text)
+
+START=$(date +%s)
+aws ec2 terminate-instances --instance-ids $INSTANCE
+
+# Wait for replacement to be healthy
+while [ $(aws elbv2 describe-target-health \
+  --target-group-arn &lt;tg-arn&gt; \
+  --query 'TargetHealthDescriptions[?TargetHealth.State==`healthy`]|length(@)' \
+  --output text) -lt 3 ]; do
+  sleep 10
+done
+ACTUAL_RTO=$(( $(date +%s) - START ))
+echo "Stateless node replacement RTO: ${ACTUAL_RTO}s"</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h3>Test 3: Redis Failover</h3>
+
+<pre><code>START=$(date +%s)
+aws elasticache test-failover \
+  --replication-group-id app-redis \
+  --node-group-id 0001
+
+while [ "$(aws elasticache describe-replication-groups \
+  --replication-group-id app-redis \
+  --query 'ReplicationGroups[0].Status' --output text)" != "available" ]; do
+  sleep 5
+done
+ACTUAL_RTO=$(( $(date +%s) - START ))
+echo "Redis failover RTO: ${ACTUAL_RTO}s"</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>DR Readiness Criteria</h2>
+
+<p>The system is declared DR-ready when ALL of the following pass:</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>Criterion</th><th>Test Method</th><th>Frequency</th><th>Pass Threshold</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Aurora backup restores successfully</td><td>Monthly snapshot restore test</td><td>Monthly</td><td>&lt; 30 min RTO, 0 data loss</td></tr>
+    <tr><td>S3 CRR lag within RPO</td><td>Object replication timing test</td><td>Monthly</td><td>&lt; 5 min</td></tr>
+    <tr><td>Aurora failover within RTO</td><td><code>test-failover</code> CLI</td><td>Monthly</td><td>&lt; 2 min</td></tr>
+    <tr><td>ASG instance replacement</td><td>Instance termination test</td><td>Monthly</td><td>&lt; 5 min</td></tr>
+    <tr><td>DNS cutover within target</td><td>Route53 update + nslookup timing</td><td>Quarterly</td><td>&lt; 90 seconds propagation</td></tr>
+    <tr><td>Full region failover</td><td>DR drill</td><td>Quarterly</td><td>&lt; 15 min end-to-end</td></tr>
+    <tr><td>ATHENA prediction accuracy</td><td>Compare predicted vs actual RTO</td><td>Per incident</td><td>± 20% error rate</td></tr>
+    <tr><td>All runbook steps executable</td><td>Hands-on walkthrough</td><td>Quarterly</td><td>0 missing permissions</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>DR readiness score:</strong> <code>(passed criteria / total criteria) × 100</code><br>
+Target: ≥ 90% (at least 8 of 8 for full readiness, 7 of 8 for conditional readiness).</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Test Result Logging</h2>
+
+<p>After each test, submit to ATHENA:</p>
+<pre><code>curl -X POST http://localhost:8001/api/postmortem \
+  -H "Content-Type: application/json" \
+  -d '{
+    "incident_id": "test-$(date +%Y%m%d)-aurora",
+    "origin_node_id": "app-postgres",
+    "predicted_rto_minutes": &lt;athena-prediction&gt;,
+    "actual_rto_minutes": &lt;measured&gt;,
+    "predicted_blast_radius": &lt;athena-count&gt;,
+    "actual_blast_radius": &lt;observed&gt;,
+    "test_type": "chaos_failover",
+    "passed": true,
+    "notes": "Monthly backup validation. No deviations from runbook."
+  }'</code></pre>
+
+</article>
+</body>
+</html>

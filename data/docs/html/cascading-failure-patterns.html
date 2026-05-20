@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Cascading Failure Patterns</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Cascading Failure Patterns</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Cascading Failure Patterns</h1>
+  <p class="subtitle">Cascading failures occur when a single component failure triggers secondary and tertiary failures across the dependency graph. ATHENA's BFS simulation traverses <code>DEPENDS_ON</code> edges in Neo4j to compute the blast radius.</p>
+</header>
+<article>
+
+<h2>Pattern 1: Database → Application → Load Balancer</h2>
+
+<p><strong>Trigger:</strong> Aurora primary (<code>aws_rds_cluster</code>) fails or becomes unavailable.</p>
+
+<p><strong>Cascade sequence:</strong></p>
+<ol>
+  <li><strong>T+0s</strong> — Aurora writer fails; cluster endpoint returns connection errors</li>
+  <li><strong>T+5s</strong> — Application servers (<code>aws_instance</code>) begin receiving <code>ECONNRESET</code> on DB connections</li>
+  <li><strong>T+15s</strong> — Connection pool exhausted; application returns 500 errors to all requests</li>
+  <li><strong>T+30s</strong> — ALB (<code>aws_lb</code>) health check fails on application instances</li>
+  <li><strong>T+60s</strong> — ALB routes remaining traffic to surviving instances; overloads them</li>
+  <li><strong>T+90s</strong> — Surviving instances become unhealthy from overload → full service outage</li>
+</ol>
+
+<p><strong>Blast radius:</strong> 3 hops from origin (Aurora → App servers → ALB)<br>
+<strong>Eisenhower classification:</strong> Q1 (RTO breach: 2+ min &gt; target; critical blast radius ≤ 2 hops; affects production)</p>
+
+<p><strong>Mitigation:</strong></p>
+<ul>
+  <li>Circuit breaker at application layer (fail fast, don't hold connections)</li>
+  <li>Connection pool <code>max_wait = 500ms</code> with immediate fail on timeout</li>
+  <li>ALB health check grace period: allow 2 consecutive failures before removing target</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Pattern 2: Cache → Database Stampede</h2>
+
+<p><strong>Trigger:</strong> Redis (<code>aws_elasticache_cluster</code>) primary fails; cache unavailable for 30–120 seconds.</p>
+
+<p><strong>Cascade sequence:</strong></p>
+<ol>
+  <li><strong>T+0s</strong> — Redis primary fails; replica promotion begins</li>
+  <li><strong>T+5s</strong> — Cache miss rate → 100%; all requests miss cache</li>
+  <li><strong>T+10s</strong> — All missed cache requests fall through to Aurora for reads</li>
+  <li><strong>T+20s</strong> — Aurora connection count spikes 5–10x; <code>DatabaseConnections</code> alarm fires</li>
+  <li><strong>T+30s</strong> — Aurora CPU spikes; queries slow down (lock contention, buffer pool pressure)</li>
+  <li><strong>T+45s</strong> — Slow Aurora responses cause application timeouts; error rate increases</li>
+  <li><strong>T+60s</strong> — Redis replica promoted; but Aurora now overloaded, app still slow</li>
+</ol>
+
+<p><strong>Blast radius:</strong> 2 hops (Redis → Aurora → App servers)<br>
+<strong>Eisenhower classification:</strong> Q2 during Redis promotion (not urgent if auto-failover working; important because affects production)</p>
+
+<p><strong>Mitigation:</strong></p>
+<ul>
+  <li>Request coalescing: deduplicate simultaneous cache-miss requests for same key</li>
+  <li>Stale-while-revalidate pattern: serve expired cache data during miss</li>
+  <li>Aurora connection pooling: PgBouncer or RDS Proxy to limit max connections</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Pattern 3: Queue Consumer Death → DLQ Overflow</h2>
+
+<p><strong>Trigger:</strong> Application servers (<code>aws_instance</code>) fail while processing SQS messages.</p>
+
+<p><strong>Cascade sequence:</strong></p>
+<ol>
+  <li><strong>T+0s</strong> — App instances fail; in-flight SQS messages reach <code>VisibilityTimeout</code></li>
+  <li><strong>T+VisibilityTimeout</strong> — Messages become visible again; retried up to <code>maxReceiveCount</code></li>
+  <li><strong>T+N×VisibilityTimeout</strong> — Messages exceed <code>maxReceiveCount</code>; moved to DLQ</li>
+  <li><strong>T+ongoing</strong> — New messages queue in main queue; <code>ApproximateAgeOfOldestMessage</code> grows</li>
+  <li><strong>T+4h</strong> — If SQS retention period reached before consumers recover, messages lost</li>
+</ol>
+
+<p><strong>Blast radius:</strong> 1 hop from App servers (consumers → SQS queue)<br>
+<strong>Eisenhower classification:</strong> Q3 (urgent: queue growing; not important if jobs are background tasks)</p>
+
+<p><strong>Mitigation:</strong></p>
+<ul>
+  <li>Set <code>VisibilityTimeout</code> to <code>max_processing_time × 1.5</code> (avoids premature re-queuing)</li>
+  <li>DLQ <code>maxReceiveCount = 3</code> (fail fast to DLQ rather than consuming retry capacity)</li>
+  <li>Separate consumer processes from API servers (failure isolation)</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Pattern 4: AZ Failure — Partial Multi-AZ Cascade</h2>
+
+<p><strong>Trigger:</strong> Availability Zone us-east-1a becomes unavailable.</p>
+
+<p><strong>Cascade sequence:</strong></p>
+<ol>
+  <li><strong>T+0s</strong> — All resources in us-east-1a become unavailable simultaneously</li>
+  <li><strong>T+0s</strong> — Aurora promotes replica in us-east-1b (if Multi-AZ enabled): 30–120 seconds</li>
+  <li><strong>T+0s</strong> — ElastiCache promotes replica in us-east-1b: 20–60 seconds</li>
+  <li><strong>T+0s</strong> — ASG terminates us-east-1a instances; launches replacements in us-east-1b, us-east-1c</li>
+  <li><strong>T+30s</strong> — New instances in us-east-1b/1c come online; connection storm to Aurora/Redis</li>
+  <li><strong>T+60s</strong> — Aurora/Redis handling connection storm; temporary performance degradation</li>
+  <li><strong>T+90s</strong> — Normal operation resumes in remaining AZs</li>
+</ol>
+
+<p><strong>Blast radius:</strong> ALL nodes in us-east-1a simultaneously; secondary effects in us-east-1b/1c from connection surge<br>
+<strong>Eisenhower classification:</strong> Q1 (AZ failure = RTO breach likely; critical blast radius; cascade in progress)</p>
+
+<p><strong>Mitigation:</strong></p>
+<ul>
+  <li>Pre-warm connection pools on surviving AZ instances before traffic shifts</li>
+  <li>RDS Proxy absorbs connection storms (decouples app connections from DB connections)</li>
+  <li>Spread ASG min capacity: <code>desired_capacity / num_AZs</code> per AZ minimum</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Pattern 5: Memory Pressure → OOM Cascade</h2>
+
+<p><strong>Trigger:</strong> Aurora or ElastiCache node runs out of memory; evictions or OOM kill occurs.</p>
+
+<p><strong>Cascade sequence:</strong></p>
+<ol>
+  <li><strong>T+0s</strong> — Memory usage approaches 100%; OS starts swapping (database)</li>
+  <li><strong>T+30s</strong> — Query latency increases 5–10x due to swap I/O</li>
+  <li><strong>T+60s</strong> — Application timeouts; requests begin failing</li>
+  <li><strong>T+90s</strong> — If OOM killer triggers: database process killed; instance restarts</li>
+  <li><strong>T+2min</strong> — Instance restart (60–120 seconds); equivalent to node failure</li>
+  <li><strong>T+3min</strong> — Cascades as per Pattern 1 (database failure)</li>
+</ol>
+
+<p><strong>Blast radius:</strong> Starts as 1 node; if OOM kill → cascades as full DB failure<br>
+<strong>Eisenhower classification:</strong> Q2 initially (warning, not yet breach); escalates to Q1 if OOM kill occurs</p>
+
+<p><strong>Mitigation:</strong></p>
+<ul>
+  <li>CloudWatch alarm on <code>FreeableMemory &lt; 500 MB</code> (15-minute warning before crisis)</li>
+  <li>Aurora parameter: <code>max_connections</code> tuned to <code>LEAST(DBInstanceClassMemory/9531392, 5000)</code></li>
+  <li>ElastiCache: enable <code>maxmemory-policy allkeys-lru</code> to evict old keys before OOM</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Blast Radius Calculation</h2>
+
+<p>ATHENA uses BFS (Breadth-First Search) to traverse the dependency graph from the origin node:</p>
+<pre><code>blast_radius[distance=0] = origin node
+blast_radius[distance=1] = nodes with DEPENDS_ON edge to origin
+blast_radius[distance=2] = nodes depending on distance=1 nodes
+...
+blast_radius[distance=N] = nodes at N hops from origin</code></pre>
+
+<p><strong>Eisenhower urgency based on blast radius:</strong></p>
+<ul>
+  <li>Distance ≤ 2: <code>critical_blast = True</code> → contributes to <strong>Important</strong> classification</li>
+  <li>Distance &gt; 2: not critical by default (but may still affect Eisenhower if affects_production)</li>
+</ul>
+
+<p><strong>RTO impact accumulation:</strong></p>
+<ul>
+  <li>Effective RTO at each node = max(own RTO, upstream node RTO × latency_factor)</li>
+  <li><code>replica_fallback</code> nodes: effective RTO = base RTO × 0.5 (fast recovery)</li>
+  <li><code>backup_fallback</code> nodes: effective RTO = base RTO × 2.0 (slow recovery)</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Recovery Priority During Cascading Failure</h2>
+
+<p>When multiple nodes are failing simultaneously:</p>
+<ol>
+  <li><strong>Restore in reverse blast-radius order</strong> (furthest first is wrong — restore origin first)</li>
+  <li><strong>Priority order:</strong> Database &gt; Cache &gt; Application &gt; Queue &gt; Load Balancer</li>
+  <li><strong>Reason:</strong> Restoring downstream nodes before origin leads to immediate re-failure when origin comes back</li>
+</ol>
+
+<p>Correct sequence for Pattern 1 cascade:</p>
+<ol>
+  <li>Restore Aurora (origin) → wait for full health</li>
+  <li>Flush application connection pools → reconnect to Aurora</li>
+  <li>Verify Redis is healthy or promote replica</li>
+  <li>Validate ALB health checks pass</li>
+  <li>Restore SQS consumers last (low risk, queue retains messages)</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Common False Positives</h2>
+
+<p>Not all "cascading" alerts are real failures:</p>
+<ul>
+  <li><strong>Deploy-time health check dips:</strong> Normal during rolling deployments; <code>HealthyHostCount</code> temporarily drops</li>
+  <li><strong>Replication lag spikes:</strong> Heavy write load temporarily increases lag; watch for sustained lag &gt; 60 seconds before escalating</li>
+  <li><strong>Connection count spikes:</strong> Burst traffic causes connection surge; not a failure if DB handles it within 30 seconds</li>
+  <li><strong>SQS depth spikes:</strong> Batch job submission; depth grows then drains normally</li>
+</ul>
+
+</article>
+</body>
+</html>

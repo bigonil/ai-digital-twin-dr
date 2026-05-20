@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — DNS &amp; Route53 Failover Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{--bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;--accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}ul,ol{margin:0 0 16px 22px}li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+hr{border:none;border-top:1px solid var(--border);margin:32px 0}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>DNS &amp; Route53 Failover Guide</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>DNS &amp; Route53 Failover — DR Guide</h1>
+  <p class="subtitle">Route53 is the DNS layer that controls which region receives traffic. Correct DNS configuration is the difference between a 2-minute failover and a 30-minute outage.</p>
+</header>
+<article>
+
+<h2>Route53 Health Check Configuration</h2>
+
+<h3>ALB Health Check (Primary)</h3>
+<pre><code>aws route53 create-health-check \
+  --caller-reference "app-alb-primary-$(date +%s)" \
+  --health-check-config '{
+    "Type": "HTTPS",
+    "ResourcePath": "/health",
+    "FullyQualifiedDomainName": "&lt;us-east-1-alb-dns&gt;",
+    "Port": 443,
+    "RequestInterval": 10,
+    "FailureThreshold": 3,
+    "EnableSNI": true,
+    "Regions": ["us-east-1", "eu-west-1", "ap-southeast-1"]
+  }'</code></pre>
+
+<p><strong>Failover timing:</strong> 10-second interval × 3 failures = <strong>30-second detection</strong> + 60-second DNS TTL = ~90 seconds to route switch.</p>
+
+<h3>Health Check Status Monitoring</h3>
+<pre><code>aws route53 get-health-check-status \
+  --health-check-id &lt;hc-id&gt; \
+  --query 'HealthCheckObservations[*].{Region:Region,Status:StatusReport.Status,Checked:StatusReport.CheckedTime}'
+
+aws route53 list-health-checks \
+  --query 'HealthChecks[*].{Id:Id,Type:HealthCheckConfig.Type,Domain:HealthCheckConfig.FullyQualifiedDomainName}'</code></pre>
+
+<hr>
+
+<h2>Failover Routing Policy Setup</h2>
+
+<h3>Active-Passive Failover (Primary + DR)</h3>
+<pre><code># Primary record (us-east-1) — FAILOVER type, PRIMARY
+aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;zone-id&gt; \
+  --change-batch '{
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "app.company.com",
+        "Type": "A",
+        "SetIdentifier": "primary-us-east-1",
+        "Failover": "PRIMARY",
+        "HealthCheckId": "&lt;us-east-1-hc-id&gt;",
+        "TTL": 60,
+        "ResourceRecords": [{"Value": "&lt;us-east-1-alb-ip&gt;"}]
+      }
+    }]
+  }'
+
+# DR record (eu-west-1) — FAILOVER type, SECONDARY
+aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;zone-id&gt; \
+  --change-batch '{
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "app.company.com",
+        "Type": "A",
+        "SetIdentifier": "secondary-eu-west-1",
+        "Failover": "SECONDARY",
+        "TTL": 60,
+        "ResourceRecords": [{"Value": "&lt;eu-west-1-alb-ip&gt;"}]
+      }
+    }]
+  }'</code></pre>
+
+<blockquote>Use <code>AliasTarget</code> instead of <code>ResourceRecords</code> for ALB targets — no TTL required, faster propagation.</blockquote>
+
+<pre><code>aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;zone-id&gt; \
+  --change-batch '{
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "app.company.com",
+        "Type": "A",
+        "SetIdentifier": "primary-us-east-1",
+        "Failover": "PRIMARY",
+        "HealthCheckId": "&lt;hc-id&gt;",
+        "AliasTarget": {
+          "HostedZoneId": "Z35SXDOTRQ7X7K",
+          "DNSName": "&lt;alb-dns&gt;.us-east-1.elb.amazonaws.com",
+          "EvaluateTargetHealth": true
+        }
+      }
+    }]
+  }'</code></pre>
+
+<hr>
+
+<h2>TTL Management During DR</h2>
+
+<h3>Before Planned DR Test (reduce TTL in advance)</h3>
+<pre><code># Lower TTL 24 hours before DR test (from 300s to 60s)
+aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;zone-id&gt; \
+  --change-batch '{
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "app.company.com",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [{"Value": "&lt;current-ip&gt;"}]
+      }
+    }]
+  }'</code></pre>
+
+<p><strong>Wait for cache to expire before DR:</strong> TTL lowered at T-24h; at T-0 all resolvers have 60-second TTL. Failover propagates in 60–90 seconds instead of 300 seconds.</p>
+
+<h3>Emergency TTL Override</h3>
+<p>For unplanned DR with high TTL cached by resolvers:</p>
+<ul>
+<li>CloudFront + Route53 can bypass ISP DNS caches via anycast propagation</li>
+<li>For A records: resolvers honor TTL; can't force cache purge</li>
+<li>Mitigation: target 60-second TTL as default for all production A records</li>
+</ul>
+
+<hr>
+
+<h2>Manual DNS Failover (Emergency)</h2>
+
+<p>When automatic failover is not triggering or is too slow:</p>
+<pre><code>cat &gt; /tmp/failover.json &lt;&lt; 'EOF'
+{
+  "Changes": [{
+    "Action": "UPSERT",
+    "ResourceRecordSet": {
+      "Name": "app.company.com",
+      "Type": "A",
+      "SetIdentifier": "primary-us-east-1",
+      "Failover": "PRIMARY",
+      "HealthCheckId": "&lt;hc-id&gt;",
+      "AliasTarget": {
+        "HostedZoneId": "&lt;eu-west-1-alb-zone-id&gt;",
+        "DNSName": "&lt;eu-west-1-alb-dns&gt;",
+        "EvaluateTargetHealth": true
+      }
+    }
+  }]
+}
+EOF
+
+aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;zone-id&gt; \
+  --change-batch file:///tmp/failover.json
+
+# Track change propagation
+CHANGE_ID=$(aws route53 change-resource-record-sets ... --query 'ChangeInfo.Id' --output text)
+aws route53 wait resource-record-sets-changed --id $CHANGE_ID
+echo "DNS change propagated globally"</code></pre>
+
+<hr>
+
+<h2>DNS Propagation Verification</h2>
+
+<pre><code># Check from multiple global DNS resolvers
+for RESOLVER in 8.8.8.8 1.1.1.1 208.67.222.222 9.9.9.9; do
+  echo -n "Resolver $RESOLVER: "
+  nslookup app.company.com $RESOLVER | grep -A1 "Name:" | tail -1
+done
+
+# Track propagation over time
+for i in $(seq 1 12); do
+  echo "$(date): $(dig +short app.company.com @8.8.8.8)"
+  sleep 10
+done</code></pre>
+
+<hr>
+
+<h2>Private DNS — Internal Services</h2>
+
+<p>Internal services use Route53 Private Hosted Zones for service discovery. During DR:</p>
+<pre><code># Check private hosted zone exists in eu-west-1 VPC
+aws route53 list-hosted-zones \
+  --query 'HostedZones[?Config.PrivateZone==`true`]'
+
+# Verify internal service records point to DR region resources
+aws route53 list-resource-record-sets \
+  --hosted-zone-id &lt;private-zone-id&gt; \
+  --query 'ResourceRecordSets[?Type==`CNAME`]'
+
+# Update internal DB record to point to eu-west-1 Aurora endpoint
+aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;private-zone-id&gt; \
+  --change-batch '{
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "postgres.internal",
+        "Type": "CNAME",
+        "TTL": 30,
+        "ResourceRecords": [{"Value": "&lt;eu-west-1-aurora-endpoint&gt;"}]
+      }
+    }]
+  }'</code></pre>
+
+<hr>
+
+<h2>Common DNS-Related DR Failures</h2>
+
+<h3>Failure 1: TTL too high → slow failover</h3>
+<ul>
+<li><strong>Symptom:</strong> Failover took 10+ minutes despite Route53 updating</li>
+<li><strong>Root cause:</strong> ISP resolvers cached old IP for full TTL duration</li>
+<li><strong>Prevention:</strong> Set production TTL to 60 seconds; lower to 30 seconds for critical records</li>
+</ul>
+
+<h3>Failure 2: Health check checking wrong path</h3>
+<ul>
+<li><strong>Symptom:</strong> Route53 health check fails even when ALB is healthy</li>
+<li><strong>Root cause:</strong> Health check path <code>/</code> returns 301 redirect, which Route53 counts as failure</li>
+<li><strong>Fix:</strong> Set health check path to <code>/health</code> which returns 200 directly</li>
+</ul>
+
+<h3>Failure 3: Split-brain — some clients in primary, some in DR</h3>
+<ul>
+<li><strong>Symptom:</strong> Inconsistent errors; some users fine, others failing</li>
+<li><strong>Root cause:</strong> Different resolvers have cached different records during cutover</li>
+<li><strong>Timeline:</strong> Normal — split-brain lasts 60–300 seconds during TTL expiry</li>
+<li><strong>Fix:</strong> Ensure application is stateless or uses distributed session (Redis in DR region)</li>
+</ul>
+
+<h3>Failure 4: Internal DNS not updated — app connects to dead DB</h3>
+<ul>
+<li><strong>Symptom:</strong> EC2 instances in eu-west-1 can reach ALB but get DB connection errors</li>
+<li><strong>Root cause:</strong> Private hosted zone still points to us-east-1 Aurora endpoint</li>
+<li><strong>Fix:</strong> Update private zone records (see Private DNS section above)</li>
+</ul>
+
+<h3>Failure 5: Alias target zone ID mismatch</h3>
+<ul>
+<li><strong>Symptom:</strong> Route53 change rejected with <code>InvalidInput</code> error</li>
+<li><strong>Root cause:</strong> ALB hosted zone IDs differ by region</li>
+<li><strong>Fix:</strong> <code>aws elbv2 describe-load-balancers --region eu-west-1 --query 'LoadBalancers[0].CanonicalHostedZoneId'</code></li>
+</ul>
+
+</article>
+</body>
+</html>

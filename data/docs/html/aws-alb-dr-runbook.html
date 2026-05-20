@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — AWS Application Load Balancer — Disaster Recovery Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* NAV */
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+
+/* HEADER */
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+
+/* CONTENT */
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+
+/* CODE */
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+
+/* TABLES */
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+
+/* BLOCKQUOTE / NOTE */
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+
+/* MOBILE */
+@media(max-width:640px){
+  nav,header,article{padding-left:20px;padding-right:20px}
+  h1{font-size:22px}
+  h2{font-size:17px}
+  pre{padding:14px;font-size:11px}
+}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>AWS Application Load Balancer — Disaster Recovery Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>AWS Application Load Balancer — Disaster Recovery Runbook</h1>
+  <p class="subtitle">Resource Type: <code>aws_lb</code> | Strategy: stateless, multi_az. ALBs are fully managed, multi-AZ Layer 7 load balancers. DR focuses on target group health, listener rules, SSL certificates, and cross-zone routing.</p>
+</header>
+<article>
+
+<h2>Overview</h2>
+
+<p>Application Load Balancers (<code>aws_lb</code>) are fully managed, multi-AZ Layer 7 load balancers. ALB nodes run in every enabled AZ automatically; there is no single point of failure at the load balancer level. ALB DR focuses on target group health, listener rules, SSL certificates, and cross-zone routing.</p>
+
+<p>RTO targets: &lt; 30 seconds (target group routing change) | 2–5 min (DNS-based failover) | 10 min (new ALB provisioning)<br>
+RPO: 0 (ALB is stateless)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: All Targets Unhealthy (503)</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>ALB returns 503 to all requests</li>
+<li>CloudWatch: <code>HealthyHostCount</code> = 0 in target group</li>
+<li>Access logs show <code>"target_status_code": "-"</code> (no healthy targets)</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws elbv2 describe-target-health \
+  --target-group-arn &lt;target-group-arn&gt;
+
+aws elbv2 describe-load-balancers \
+  --names app-alb \
+  --query 'LoadBalancers[0].{State:State,DNSName:DNSName,AZs:AvailabilityZones}'
+
+aws logs filter-log-events \
+  --log-group-name /aws/alb/app-alb \
+  --filter-pattern '"503"' \
+  --start-time $(date -u -d '5 min ago' +%s000)</code></pre>
+
+<p><strong>Recovery Steps — stateless:</strong></p>
+<ol>
+<li>Identify root cause: are targets unhealthy (app issue) or deregistered (deployment issue)?
+<pre><code>aws elbv2 describe-target-health \
+  --target-group-arn &lt;arn&gt; \
+  --query 'TargetHealthDescriptions[*].{Id:Target.Id,State:TargetHealth.State,Reason:TargetHealth.Reason,Desc:TargetHealth.Description}'</code></pre></li>
+<li>If targets are draining (deployment gone wrong), cancel in-progress deployment:
+<pre><code>aws deploy stop-deployment --deployment-id &lt;d-id&gt; --auto-rollback-enabled</code></pre></li>
+<li>If targets are unhealthy due to app failure, trigger ASG instance refresh:
+<pre><code>aws autoscaling start-instance-refresh \
+  --auto-scaling-group-name app-asg \
+  --preferences '{"MinHealthyPercentage":50}'</code></pre></li>
+<li>Override health check to allow temporarily unhealthy targets (emergency only):
+<pre><code>aws elbv2 modify-target-group \
+  --target-group-arn &lt;arn&gt; \
+  --healthy-threshold-count 2 \
+  --unhealthy-threshold-count 10 \
+  --health-check-interval-seconds 30</code></pre></li>
+<li>Verify recovery: wait for <code>HealthyHostCount</code> ≥ 1 before removing override</li>
+</ol>
+
+<p><strong>Verification:</strong> <code>curl -I https://&lt;alb-dns-name&gt;/health</code> returns 200.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: AZ Outage — ALB Node Failure (multi_az)</h2>
+
+<p><strong>Symptoms:</strong> Traffic from one AZ fails; some users see errors, others don't.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>ALB automatically stops routing to nodes in failed AZ — no manual action required</li>
+<li>Verify cross-zone load balancing is enabled (distributes load from healthy AZs):
+<pre><code>aws elbv2 describe-load-balancer-attributes \
+  --load-balancer-arn &lt;arn&gt; \
+  --query 'Attributes[?Key==`load_balancing.cross_zone.enabled`]'</code></pre></li>
+<li>If cross-zone is disabled, enable it:
+<pre><code>aws elbv2 modify-load-balancer-attributes \
+  --load-balancer-arn &lt;arn&gt; \
+  --attributes Key=load_balancing.cross_zone.enabled,Value=true</code></pre></li>
+<li>Monitor <code>TargetResponseTime</code> — cross-zone increases latency slightly but improves availability</li>
+<li>Temporarily reduce desired capacity in failed AZ's target group if stale targets remain</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: SSL Certificate Expiry</h2>
+
+<p><strong>Symptoms:</strong> HTTPS traffic fails; browsers show <code>NET::ERR_CERT_DATE_INVALID</code>; CloudWatch <code>TLSNegotiationErrorCount</code> spikes.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Check certificate expiry:
+<pre><code>aws acm list-certificates --query 'CertificateSummaryList[*].{ARN:CertificateArn,Domain:DomainName,Status:Status}'
+aws acm describe-certificate --certificate-arn &lt;arn&gt; --query 'Certificate.NotAfter'</code></pre></li>
+<li>Request new certificate (if ACM auto-renewal failed):
+<pre><code>aws acm request-certificate \
+  --domain-name app.company.com \
+  --validation-method DNS \
+  --subject-alternative-names "*.app.company.com"</code></pre></li>
+<li>After DNS validation, update HTTPS listener:
+<pre><code>aws elbv2 modify-listener \
+  --listener-arn &lt;https-listener-arn&gt; \
+  --certificates CertificateArn=&lt;new-cert-arn&gt;</code></pre></li>
+<li>Expected RTO: 5–15 minutes (DNS validation) + immediate for listener update</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: DR Region Failover via Route53</h2>
+
+<p><strong>Symptoms:</strong> Primary region (us-east-1) ALB unhealthy; Route53 health check fails.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Verify Route53 health check status:
+<pre><code>aws route53 list-health-checks \
+  --query 'HealthChecks[?HealthCheckConfig.FullyQualifiedDomainName==`app-alb.us-east-1.amazonaws.com`]'</code></pre></li>
+<li>If health check is failing, Route53 failover routing policy automatically routes to eu-west-1 ALB (30–60 second propagation)</li>
+<li>Manually force failover if automatic routing is delayed:
+<pre><code>aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;zone-id&gt; \
+  --change-batch file://failover-to-dr.json</code></pre></li>
+<li>Verify DNS resolves to DR ALB: <code>nslookup app.company.com</code></li>
+<li>Scale up eu-west-1 ASG: <code>aws autoscaling set-desired-capacity --auto-scaling-group-name app-asg-dr --desired-capacity 3</code></li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_lb</code>:</p>
+<ul>
+<li><code>AWS/ApplicationELB/HealthyHostCount</code> — alert at &lt; 2 (target group)</li>
+<li><code>AWS/ApplicationELB/UnHealthyHostCount</code> — alert at ≥ 1</li>
+<li><code>AWS/ApplicationELB/HTTPCode_ELB_5XX_Count</code> — alert at &gt; 10/min (ALB-generated errors)</li>
+<li><code>AWS/ApplicationELB/HTTPCode_Target_5XX_Count</code> — alert at &gt; 50/min</li>
+<li><code>AWS/ApplicationELB/TargetResponseTime</code> — alert at p95 &gt; 2 seconds</li>
+<li><code>AWS/ApplicationELB/RejectedConnectionCount</code> — alert at &gt; 0 (connection surge)</li>
+<li><code>AWS/ApplicationELB/TLSNegotiationErrorCount</code> — alert at &gt; 0 (cert/TLS issue)</li>
+<li><code>AWS/ApplicationELB/ActiveConnectionCount</code> — monitor for traffic spikes</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Access Log Analysis for Root Cause</h2>
+
+<p>ALB access logs in S3 (<code>s3://access-logs-bucket/AWSLogs/&lt;account&gt;/elasticloadbalancing/</code>):</p>
+<pre><code># Top error types in last hour
+aws s3 cp s3://&lt;log-bucket&gt;/&lt;prefix&gt;/$(date +%Y/%m/%d)/&lt;latest&gt;.log.gz - | \
+  gunzip | awk '{print $9}' | sort | uniq -c | sort -rn | head -20
+
+# Identify slowest targets
+aws s3 cp s3://&lt;log-bucket&gt;/&lt;prefix&gt;/&lt;file&gt;.log.gz - | \
+  gunzip | awk '{print $5, $8}' | sort -k2 -rn | head -10</code></pre>
+
+</article>
+</body>
+</html>

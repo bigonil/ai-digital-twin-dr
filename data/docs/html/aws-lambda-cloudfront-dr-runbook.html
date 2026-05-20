@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — AWS Lambda &amp; CloudFront — Disaster Recovery Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* NAV */
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+
+/* HEADER */
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+
+/* CONTENT */
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+
+/* CODE */
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+
+/* TABLES */
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+
+/* BLOCKQUOTE / NOTE */
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+
+/* MOBILE */
+@media(max-width:640px){
+  nav,header,article{padding-left:20px;padding-right:20px}
+  h1{font-size:22px}
+  h2{font-size:17px}
+  pre{padding:14px;font-size:11px}
+}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>AWS Lambda &amp; CloudFront — Disaster Recovery Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>AWS Lambda &amp; CloudFront — Disaster Recovery Runbook</h1>
+  <p class="subtitle">Resource Types: <code>aws_lambda_function</code> | <code>aws_cloudfront</code> | Strategy: stateless. Lambda functions are serverless, inherently multi-AZ, and stateless. CloudFront is a global CDN with 99.99% SLA — failure is typically origin-based, not CDN-based.</p>
+</header>
+<article>
+
+<h2>Overview</h2>
+
+<p>Lambda functions (<code>aws_lambda_function</code>) are serverless, inherently multi-AZ, and stateless. AWS manages all underlying infrastructure. DR for Lambda focuses on concurrency limits, dead-letter queues, and region failover. CloudFront (<code>aws_cloudfront</code>) is a global CDN with 99.99% SLA — failure is typically origin-based, not CDN-based.</p>
+
+<p>RTO targets: Lambda &lt; 30 seconds (auto-restart) | CloudFront &lt; 2 min (origin failover) | Region failover 5–10 min<br>
+RPO: 0 for both (stateless)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Lambda — Failure Scenario: Function Throttling</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>CloudWatch: <code>Lambda/Throttles</code> metric &gt; 0</li>
+<li>Downstream services receive <code>TooManyRequestsException</code> (HTTP 429)</li>
+<li>SQS DLQ filling up if Lambda is an SQS consumer</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/Lambda \
+  --metric-name Throttles \
+  --dimensions Name=FunctionName,Value=&lt;function-name&gt; \
+  --start-time $(date -u -d '15 min ago' +%FT%TZ) \
+  --end-time $(date -u +%FT%TZ) \
+  --period 60 --statistics Sum
+
+aws lambda get-function-concurrency --function-name &lt;function-name&gt;
+aws lambda get-account-settings  # Check account-level concurrency limits</code></pre>
+
+<p><strong>Recovery Steps — stateless:</strong></p>
+<ol>
+<li>Check reserved concurrency — if set too low, increase it:
+<pre><code>aws lambda put-function-concurrency \
+  --function-name &lt;function-name&gt; \
+  --reserved-concurrent-executions 500</code></pre></li>
+<li>If account limit is reached (default 1000), request increase:
+<pre><code>aws service-quotas request-service-quota-increase \
+  --service-code lambda \
+  --quota-code L-B99A9384 \
+  --desired-value 3000</code></pre></li>
+<li>Enable provisioned concurrency to pre-warm instances (avoids cold starts during burst):
+<pre><code>aws lambda put-provisioned-concurrency-config \
+  --function-name &lt;function-name&gt; \
+  --qualifier &lt;alias-or-version&gt; \
+  --provisioned-concurrent-executions 100</code></pre></li>
+<li>Throttled SQS messages: increase SQS batch size to reduce invocation rate, or increase concurrency</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Lambda — Failure Scenario: Function Error Rate Spike</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>CloudWatch: <code>Lambda/Errors</code> metric spikes</li>
+<li><code>Lambda/Duration</code> p99 approaching timeout limit</li>
+<li>DLQ receiving messages (for async invocations)</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws logs filter-log-events \
+  --log-group-name /aws/lambda/&lt;function-name&gt; \
+  --filter-pattern "ERROR" \
+  --start-time $(date -u -d '30 min ago' +%s000) \
+  --limit 20
+
+aws lambda list-function-event-invoke-configs \
+  --function-name &lt;function-name&gt;</code></pre>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Check recent deployments — correlate error spike with deploy time:
+<pre><code>aws lambda list-versions-by-function --function-name &lt;function-name&gt; \
+  --query 'Versions[-5:].{Version:Version,Modified:LastModified}'</code></pre></li>
+<li>Roll back to last stable version:
+<pre><code>aws lambda update-alias \
+  --function-name &lt;function-name&gt; \
+  --name production \
+  --function-version &lt;last-stable-version&gt;</code></pre></li>
+<li>Check environment variables and secrets (missing config causes errors):
+<pre><code>aws lambda get-function-configuration \
+  --function-name &lt;function-name&gt; \
+  --query 'Environment.Variables'</code></pre></li>
+<li>If timeout-related: increase timeout (max 15 minutes):
+<pre><code>aws lambda update-function-configuration \
+  --function-name &lt;function-name&gt; \
+  --timeout 300</code></pre></li>
+<li>Inspect DLQ and redrive failed messages after fix</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Lambda — Failure Scenario: Region Failover</h2>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Verify Lambda function exists in DR region with same code version:
+<pre><code>aws lambda get-function --function-name &lt;function-name&gt; --region eu-west-1</code></pre></li>
+<li>If not deployed, deploy from S3 artifact:
+<pre><code>aws lambda create-function \
+  --function-name &lt;function-name&gt; \
+  --runtime python3.12 \
+  --role arn:aws:iam::&lt;account&gt;:role/&lt;lambda-role&gt; \
+  --handler handler.main \
+  --code S3Bucket=&lt;artifact-bucket&gt;,S3Key=&lt;function&gt;.zip \
+  --region eu-west-1</code></pre></li>
+<li>Update EventBridge rules, SQS triggers, or API Gateway to use DR region function</li>
+<li>Verify function health: <code>aws lambda invoke --function-name &lt;fn&gt; --region eu-west-1 /tmp/out.json &amp;&amp; cat /tmp/out.json</code></li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Lambda — Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_lambda_function</code>:</p>
+<ul>
+<li><code>Lambda/Errors</code> — alert at error rate &gt; 1% (errors/invocations)</li>
+<li><code>Lambda/Throttles</code> — alert at &gt; 10/min</li>
+<li><code>Lambda/Duration</code> — alert at p99 &gt; 80% of timeout value</li>
+<li><code>Lambda/ConcurrentExecutions</code> — alert at &gt; 80% of reserved concurrency</li>
+<li><code>Lambda/IteratorAge</code> (for stream consumers) — alert at &gt; 60 seconds (falling behind)</li>
+<li><code>Lambda/DeadLetterErrors</code> — alert at &gt; 0 (DLQ write failing)</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>CloudFront — Failure Scenario: Origin Unavailable (503/504)</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Users see <code>504 Gateway Timeout</code> or <code>502 Bad Gateway</code> from CloudFront</li>
+<li>CloudWatch: <code>CloudFront/5xxErrorRate</code> &gt; 1%</li>
+<li>CloudFront logs show <code>x-edge-result-type: Error</code></li>
+</ul>
+
+<blockquote>CloudFront itself rarely fails — 99.9% of "CloudFront outages" are origin failures (ALB, API Gateway, S3).</blockquote>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/CloudFront \
+  --metric-name 5xxErrorRate \
+  --dimensions Name=DistributionId,Value=&lt;dist-id&gt; Name=Region,Value=Global \
+  --start-time $(date -u -d '30 min ago' +%FT%TZ) \
+  --end-time $(date -u +%FT%TZ) \
+  --period 60 --statistics Average
+
+# Check origin health
+curl -I https://&lt;alb-origin-dns&gt;/health</code></pre>
+
+<p><strong>Recovery Steps — stateless:</strong></p>
+<ol>
+<li>Identify failing origin from CloudFront access logs (S3 log bucket):
+<pre><code>aws s3 cp s3://&lt;cf-logs-bucket&gt;/&lt;dist-id&gt;/&lt;date&gt;/ . --recursive
+# Check x-edge-result-type and sc-status columns</code></pre></li>
+<li>If origin (ALB) is down, fix the origin first (see ALB runbook)</li>
+<li>Enable CloudFront origin failover (if configured):
+<pre><code>aws cloudfront get-distribution-config --id &lt;dist-id&gt; | \
+  jq '.DistributionConfig.Origins.Items[].CustomOriginConfig'</code></pre></li>
+<li>If no origin failover configured, temporarily point to S3 static error page:
+<pre><code>aws cloudfront create-invalidation --distribution-id &lt;dist-id&gt; --paths "/*"</code></pre></li>
+<li>Set custom error response to serve cached or static page during outage:
+<pre><code># In distribution config: add CustomErrorResponses for 502/503/504
+# ErrorCachingMinTTL: 10, ResponsePagePath: /maintenance.html</code></pre></li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>CloudFront — Failure Scenario: SSL/TLS Certificate Expiry</h2>
+
+<p><strong>Symptoms:</strong> Browsers show <code>NET::ERR_CERT_DATE_INVALID</code>; HTTPS requests fail.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+<li>Check certificate status:
+<pre><code>aws acm describe-certificate \
+  --certificate-arn &lt;cert-arn&gt; \
+  --region us-east-1 \
+  --query 'Certificate.{Status:Status,Expiry:NotAfter,Domain:DomainName}'</code></pre>
+Note: CloudFront certs <strong>must</strong> be in <code>us-east-1</code>.</li>
+<li>Request replacement certificate (ACM auto-renews if DNS validation is active)</li>
+<li>Update CloudFront distribution to use new certificate:
+<pre><code>aws cloudfront update-distribution \
+  --id &lt;dist-id&gt; \
+  --distribution-config file://dist-config-updated.json \
+  --if-match &lt;etag&gt;</code></pre></li>
+<li>Note: CloudFront certificate deployment takes 5–15 minutes globally</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>CloudFront — Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_cloudfront</code>:</p>
+<ul>
+<li><code>CloudFront/4xxErrorRate</code> — alert at &gt; 5% (client errors or auth issues)</li>
+<li><code>CloudFront/5xxErrorRate</code> — alert at &gt; 1% (origin failures)</li>
+<li><code>CloudFront/BytesDownloaded</code> — monitor for unusual drops (traffic lost)</li>
+<li><code>CloudFront/Requests</code> — monitor for traffic spikes (DDoS indicator)</li>
+<li><code>CloudFront/TotalErrorRate</code> — alert at &gt; 2%</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Cascading Failure Risk</h2>
+
+<p>Lambda failures cascade to:</p>
+<ol>
+<li><strong>SQS queues</strong> — throttled Lambda consumers → queue depth grows → DLQ fills</li>
+<li><strong>Aurora</strong> — Lambda functions may hold DB connections; sudden restart = connection storm</li>
+<li><strong>CloudFront</strong> — if Lambda@Edge fails, CloudFront returns 502 for all requests using that function</li>
+</ol>
+
+<p>CloudFront failures cascade to:</p>
+<ol>
+<li>All end-users — 100% user-facing traffic loss if origin also fails</li>
+<li><strong>No internal system cascade</strong> — CloudFront is at the edge, no downstream dependencies</li>
+</ol>
+
+</article>
+</body>
+</html>

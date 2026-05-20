@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Incident Command Structure &amp; Post-Mortem Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Incident Command Structure &amp; Post-Mortem Guide</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Incident Command Structure &amp; Post-Mortem Guide</h1>
+  <p class="subtitle">Effective disaster recovery requires clear role assignment, structured communication, and systematic post-mortem analysis. Disorganized incident response is a leading cause of RTO overrun. This guide defines the incident command structure, communication protocols, and blameless post-mortem framework used alongside ATHENA DR simulations.</p>
+</header>
+<article>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Incident Command Structure</h2>
+
+<h3>Role Definitions</h3>
+
+<p><strong>Incident Commander (IC):</strong></p>
+<ul>
+  <li>Single decision-maker. All escalation flows through IC.</li>
+  <li>Coordinates between SRE, DBA, and Product/Customer teams</li>
+  <li>Makes the call to failover, rollback, or declare resolved</li>
+  <li>Does NOT perform technical tasks — delegates to responders</li>
+  <li>Owns status page updates every 15 minutes during active incident</li>
+</ul>
+
+<p><strong>Primary SRE (Technical Lead):</strong></p>
+<ul>
+  <li>Executes recovery runbook steps</li>
+  <li>Reports status to IC every 5 minutes</li>
+  <li>Calls out blockers immediately</li>
+  <li>Documents all actions with timestamps in incident channel</li>
+</ul>
+
+<p><strong>Secondary SRE (Shadow):</strong></p>
+<ul>
+  <li>Reviews each step before execution (two-pair review for destructive actions)</li>
+  <li>Runs verification commands to confirm recovery progress</li>
+  <li>Takes over as primary if primary SRE is unavailable</li>
+</ul>
+
+<p><strong>DBA (for database incidents):</strong></p>
+<ul>
+  <li>Owns Aurora/RDS failover decisions</li>
+  <li>Validates data integrity after restore</li>
+  <li>Confirms RPO (actual data loss window)</li>
+</ul>
+
+<p><strong>Communications Lead:</strong></p>
+<ul>
+  <li>Updates status page (never wait for IC to remember)</li>
+  <li>Drafts customer communication for P1 incidents with user impact</li>
+  <li>Handles Slack #incidents channel and executive updates</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>P1 War Room Protocol (Q1 Eisenhower Events)</h2>
+
+<h3>Activation Criteria</h3>
+<ul>
+  <li>ATHENA classifies event as Q1 (urgent + important)</li>
+  <li>ALB <code>HealthyHostCount</code> = 0 for &gt; 2 consecutive minutes</li>
+  <li>Aurora <code>DatabaseConnections</code> = 0 for &gt; 2 consecutive minutes</li>
+  <li>Multiple services failing simultaneously</li>
+</ul>
+
+<h3>War Room Setup (first 5 minutes)</h3>
+<ol>
+  <li>IC pages all roles via PagerDuty using "War Room" escalation policy</li>
+  <li>All responders join video call within 2 minutes of page</li>
+  <li>IC takes roll call: confirm IC, Primary SRE, Secondary SRE, DBA present</li>
+  <li>Primary SRE shares screen showing ATHENA dashboard + CloudWatch</li>
+  <li>IC states: "This is a P1 incident. [Node name] is failing, blast radius [N] nodes. RTO target [X] min. Primary SRE, begin runbook."</li>
+</ol>
+
+<h3>Communication Cadence During P1</h3>
+<ul>
+  <li><strong>T+0:</strong> #incidents "🚨 P1 ACTIVE — [service] down. War room started. IC: @[name]"</li>
+  <li><strong>T+5min:</strong> Status page: "We are investigating an issue affecting [service]."</li>
+  <li><strong>T+15min:</strong> Status page update (even if no progress): "Investigation ongoing. Next update in 10 minutes."</li>
+  <li><strong>T+30min:</strong> Executive update via direct message if RTO target will be missed</li>
+  <li><strong>Every 15min:</strong> Status page update until resolved</li>
+</ul>
+
+<h3>Decision Points Requiring IC Authorization</h3>
+<ul>
+  <li>Initiate region failover (us-east-1 → eu-west-1)</li>
+  <li>Roll back a deployment</li>
+  <li>Take a service into maintenance mode</li>
+  <li>Extend RTO beyond target (declare "we won't hit SLA")</li>
+  <li>Page additional on-call engineers from other teams</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>P2/P3 Protocol (Q2/Q3 Eisenhower Events)</h2>
+
+<p><strong>P2 (Q2):</strong> Assign to on-call engineer. No war room. Update every 30 minutes in Slack thread.</p>
+
+<p><strong>P3 (Q3):</strong> Assign to team queue. Handle within 4 hours. Escalation timer running (15 minutes → Q1 if unresolved).</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Incident Timeline Logging</h2>
+
+<p>Every action must be logged with timestamp in the incident Slack channel. Template:</p>
+
+<pre><code>[HH:MM UTC] ACTION: [what was done]
+[HH:MM UTC] VERIFY: [command run and output]
+[HH:MM UTC] STATUS: [healthy/degraded/failing]
+[HH:MM UTC] BLOCKER: [what's preventing progress] (if applicable)</code></pre>
+
+<p>Example:</p>
+<pre><code>[14:23 UTC] ACTION: Started Aurora failover: aws rds failover-db-cluster --db-cluster-identifier app-postgres
+[14:25 UTC] VERIFY: aws rds describe-db-clusters → Status: available, new writer: app-postgres-2
+[14:26 UTC] STATUS: Aurora healthy. Starting app connection pool reset.
+[14:28 UTC] ACTION: SSM Run Command → systemctl restart app-service on all 6 instances
+[14:31 UTC] VERIFY: ALB HealthyHostCount = 6. Error rate = 0.02%.
+[14:31 UTC] STATUS: Service recovered. Monitoring for 10 minutes before declaring resolved.</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Incident Severity Classification</h2>
+
+<div class="table-wrap"><table>
+  <thead>
+    <tr><th>Severity</th><th>Definition</th><th>RTO Target</th><th>Communication</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>P1</td><td>Full service outage — all users affected</td><td>15 min</td><td>Status page, Slack #incidents, executive</td></tr>
+    <tr><td>P2</td><td>Partial outage — subset of users or features affected</td><td>1 hour</td><td>Slack #incidents</td></tr>
+    <tr><td>P3</td><td>Degraded performance — no data loss, no outage</td><td>4 hours</td><td>Slack thread</td></tr>
+    <tr><td>P4</td><td>Minor issue — single user or internal tool</td><td>Next business day</td><td>Ticket only</td></tr>
+  </tbody>
+</table></div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Blameless Post-Mortem Framework</h2>
+
+<h3>Timing</h3>
+<ul>
+  <li>P1: Post-mortem within 48 hours of resolution</li>
+  <li>P2: Post-mortem within 1 week</li>
+  <li>P3/P4: Brief retrospective in next team meeting (optional)</li>
+</ul>
+
+<h3>Document Structure</h3>
+
+<p><strong>Section 1: Executive Summary (3 sentences)</strong></p>
+<ul>
+  <li>What failed, for how long, and what the user impact was</li>
+  <li>What was the actual RTO and RPO (vs target)</li>
+  <li>One-sentence summary of root cause</li>
+</ul>
+
+<p><strong>Section 2: Incident Timeline</strong></p>
+<p>Complete chronological log from first alert to full resolution. Include:</p>
+<ul>
+  <li>Detection delay (T_failure → T_detected)</li>
+  <li>Time to first action (T_detected → T_action)</li>
+  <li>Each major recovery step with duration</li>
+  <li>Any delays and why they occurred</li>
+</ul>
+
+<p><strong>Section 3: Root Cause Analysis — Five Whys</strong></p>
+<pre><code>Symptom: [what users experienced]
+Why 1: [immediate cause]
+Why 2: [cause of Why 1]
+Why 3: [cause of Why 2]
+Why 4: [cause of Why 3]
+Why 5: [systemic root cause]</code></pre>
+<p>Example:</p>
+<pre><code>Symptom: Users received 503 errors for 12 minutes
+Why 1: ALB had 0 healthy targets
+Why 2: All app instances failed health checks
+Why 3: Aurora failover caused connection pool exhaustion
+Why 4: Connection pool had no pre-ping configured (stale connections hung)
+Why 5: No standard connection pool configuration existed; each team configured independently</code></pre>
+
+<p><strong>Section 4: Contributing Factors (NOT blame)</strong></p>
+<p>List conditions that made the incident worse or harder to resolve:</p>
+<ul>
+  <li>Monitoring gap: alarm threshold was too high (fired too late)</li>
+  <li>Process gap: runbook didn't cover connection pool reset step</li>
+  <li>Tool gap: ATHENA simulation didn't account for connection storm in RTO estimate</li>
+  <li>Knowledge gap: on-call engineer was first week on rotation</li>
+</ul>
+
+<p><strong>Section 5: Action Items</strong></p>
+
+<div class="table-wrap"><table>
+  <thead>
+    <tr><th>Action</th><th>Owner</th><th>Due Date</th><th>Priority</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Add <code>pool_pre_ping=True</code> to all SQLAlchemy configs</td><td>Backend team</td><td>+7 days</td><td>P0</td></tr>
+    <tr><td>Add connection storm simulation to ATHENA model</td><td>SRE</td><td>+14 days</td><td>P1</td></tr>
+    <tr><td>Lower Aurora <code>HealthyHostCount</code> alarm threshold</td><td>SRE</td><td>+3 days</td><td>P1</td></tr>
+    <tr><td>Add runbook step for connection pool reset</td><td>On-call lead</td><td>+7 days</td><td>P1</td></tr>
+  </tbody>
+</table></div>
+
+<p><strong>Section 6: What Went Well</strong></p>
+<ul>
+  <li>Honest recognition of things that helped or worked better than expected</li>
+  <li>Examples: ATHENA correctly predicted blast radius; PagerDuty paged the right team; DBA had runbook ready</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>ATHENA Integration with Post-Mortem</h2>
+
+<p>After each real incident, update ATHENA:</p>
+<ol>
+  <li><strong>Compare predicted vs actual RTO:</strong>
+    <pre><code># Run simulation on the failed node
+curl -X POST http://localhost:8001/api/dr/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"node_id": "&lt;node-id&gt;", "depth": 5}'
+# Compare worst_case_rto_minutes with actual RTO from incident timeline</code></pre>
+  </li>
+  <li><strong>Update RTO/RPO values</strong> if ATHENA was systematically off:
+    <pre><code># Via ATHENA API or direct Neo4j Cypher
+curl -X PATCH http://localhost:8001/api/graph/nodes/&lt;node-id&gt; \
+  -d '{"rto_minutes": &lt;actual-average&gt;, "rpo_minutes": &lt;actual-observed&gt;}'</code></pre>
+  </li>
+  <li><strong>Log prediction accuracy</strong> for compliance: <code>POST /api/postmortem</code> with actual vs predicted values</li>
+  <li><strong>Update recovery strategy</strong> if incident revealed node is incorrectly classified (e.g., <code>generic</code> → <code>replica_fallback</code>)</li>
+</ol>
+
+</article>
+</body>
+</html>

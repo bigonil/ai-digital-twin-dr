@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — Multi-Region Failover Playbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>Multi-Region Failover Playbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>Multi-Region Failover Playbook — us-east-1 → eu-west-1</h1>
+  <p class="subtitle">This playbook orchestrates a full failover from the primary region (us-east-1) to the DR region (eu-west-1). It covers all services in dependency order: database first, then cache, then application, then DNS. Total expected RTO: 10–15 minutes for planned failover, 20–30 minutes for unplanned.</p>
+</header>
+<article>
+
+<p>Region architecture:</p>
+<ul>
+  <li><strong>Primary (active):</strong> us-east-1 — all write traffic, full capacity</li>
+  <li><strong>DR (warm standby):</strong> eu-west-1 — read replicas, scaled-down app fleet, pre-provisioned</li>
+</ul>
+
+<p>RPO at failover decision: &lt; 5 min (S3 CRR lag + Aurora Global DB lag combined)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 0: Decision to Failover</h2>
+
+<p><strong>Trigger criteria for full region failover:</strong></p>
+<ul>
+  <li>AWS Health Dashboard shows multi-service event in us-east-1 lasting &gt; 5 minutes</li>
+  <li>All three of the following metrics fail simultaneously:
+    <ul>
+      <li>ALB <code>HealthyHostCount</code> = 0</li>
+      <li>Aurora <code>DatabaseConnections</code> = 0</li>
+      <li>ElastiCache <code>CacheHitRatio</code> = 0</li>
+    </ul>
+  </li>
+  <li>Engineering leadership approves failover (requires explicit authorization)</li>
+</ul>
+
+<p><strong>DO NOT failover for:</strong></p>
+<ul>
+  <li>Single-service failures (use service-specific runbook instead)</li>
+  <li>Failures lasting &lt; 5 minutes (auto-recovery likely)</li>
+  <li>Partial degradation (one AZ down, other AZs healthy)</li>
+</ul>
+
+<p><strong>Pre-failover checklist:</strong></p>
+<ul>
+  <li>[ ] Confirm eu-west-1 Aurora replica lag &lt; 5 minutes: <code>aws rds describe-db-clusters --region eu-west-1</code></li>
+  <li>[ ] Confirm S3 CRR last sync &lt; 15 minutes</li>
+  <li>[ ] Verify eu-west-1 ACM certificate is valid: <code>aws acm list-certificates --region eu-west-1</code></li>
+  <li>[ ] Confirm on-call SRE, DBA, and engineering lead are on the war room call</li>
+  <li>[ ] Set incident status page to "Investigating"</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 1: Database Failover (T+0 to T+5 min)</h2>
+
+<h3>1a. Aurora Global Database Failover (PRIMARY — do this first)</h3>
+
+<pre><code># Promote eu-west-1 cluster to writer
+aws rds failover-global-cluster \
+  --global-cluster-identifier app-postgres-global \
+  --target-db-cluster-identifier arn:aws:rds:eu-west-1:&lt;account&gt;:cluster:app-postgres-dr \
+  --region us-east-1
+
+# Monitor promotion (takes 1–2 minutes)
+watch -n 5 'aws rds describe-db-clusters \
+  --db-cluster-identifier app-postgres-dr \
+  --region eu-west-1 \
+  --query "DBClusters[0].{Status:Status,Writer:DBClusterMembers[?IsClusterWriter==\`true\`]}"'</code></pre>
+
+<p><strong>Expected:</strong> Cluster status transitions <code>promoting → available</code>. New writer endpoint active.</p>
+
+<pre><code># Capture new endpoint for downstream steps
+NEW_DB_ENDPOINT=$(aws rds describe-db-clusters \
+  --db-cluster-identifier app-postgres-dr \
+  --region eu-west-1 \
+  --query 'DBClusters[0].Endpoint' --output text)
+echo "New DB endpoint: $NEW_DB_ENDPOINT"</code></pre>
+
+<h3>1b. Record actual RPO</h3>
+
+<pre><code># Check Aurora lag at time of failover
+aws rds describe-global-clusters \
+  --global-cluster-identifier app-postgres-global \
+  --query 'GlobalClusters[0].GlobalClusterMembers[?IsWriter==`false`].GlobalWriteForwardingStatus'</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 2: Cache Failover (T+3 to T+6 min)</h2>
+
+<pre><code># Check eu-west-1 Redis status
+aws elasticache describe-replication-groups \
+  --replication-group-id app-redis-dr \
+  --region eu-west-1 \
+  --query 'ReplicationGroups[0].{Status:Status,Primary:NodeGroups[0].PrimaryEndpoint}'
+
+# If Redis in eu-west-1 is a replica of us-east-1, remove replication link to enable writes
+aws elasticache modify-replication-group \
+  --replication-group-id app-redis-dr \
+  --remove-member-cluster-ids app-redis-dr-001 \
+  --region eu-west-1
+# (Or: delete and recreate as standalone cluster)
+
+REDIS_ENDPOINT=$(aws elasticache describe-replication-groups \
+  --replication-group-id app-redis-dr \
+  --region eu-west-1 \
+  --query 'ReplicationGroups[0].NodeGroups[0].PrimaryEndpoint.Address' --output text)
+echo "New Redis endpoint: $REDIS_ENDPOINT"</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 3: S3 — Enable Writes on Replica (T+5 to T+7 min)</h2>
+
+<pre><code># Disable replication rules so replica bucket accepts writes
+aws s3api delete-bucket-replication \
+  --bucket app-data-replica-&lt;account-id&gt; \
+  --region eu-west-1
+
+# Update SSM parameter to point app at DR bucket
+aws ssm put-parameter \
+  --name /app/s3_bucket \
+  --value app-data-replica-&lt;account-id&gt; \
+  --overwrite \
+  --region eu-west-1</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 4: Application Scale-Up (T+5 to T+10 min)</h2>
+
+<pre><code># Scale ASG to production capacity in eu-west-1
+aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name app-asg-dr \
+  --min-size 3 \
+  --desired-capacity 6 \
+  --max-size 15 \
+  --region eu-west-1
+
+# Update application config with new DB and Redis endpoints via SSM
+aws ssm put-parameter --name /app/db_host --value $NEW_DB_ENDPOINT --overwrite --region eu-west-1
+aws ssm put-parameter --name /app/redis_host --value $REDIS_ENDPOINT --overwrite --region eu-west-1
+
+# Trigger rolling restart to pick up new config (if app reads config at startup)
+aws autoscaling start-instance-refresh \
+  --auto-scaling-group-name app-asg-dr \
+  --region eu-west-1 \
+  --preferences '{"MinHealthyPercentage":50,"InstanceWarmup":60}'
+
+# Monitor fleet health
+watch -n 10 'aws elbv2 describe-target-health \
+  --target-group-arn &lt;eu-west-1-tg-arn&gt; \
+  --region eu-west-1 \
+  --query "TargetHealthDescriptions[*].{Id:Target.Id,State:TargetHealth.State}"'</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 5: DNS Cutover (T+10 min — POINT OF NO RETURN)</h2>
+
+<p><strong>This step routes all user traffic to eu-west-1. Confirm Phase 1–4 complete before proceeding.</strong></p>
+
+<pre><code># Verify eu-west-1 ALB has healthy targets
+HEALTHY=$(aws elbv2 describe-target-health \
+  --target-group-arn &lt;eu-west-1-tg-arn&gt; \
+  --region eu-west-1 \
+  --query 'TargetHealthDescriptions[?TargetHealth.State==`healthy`] | length(@)' --output text)
+echo "Healthy targets: $HEALTHY"  # Must be &gt;= 2 before proceeding
+
+# Update Route53 — weight 100% to eu-west-1
+aws route53 change-resource-record-sets \
+  --hosted-zone-id &lt;zone-id&gt; \
+  --change-batch '{
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "app.company.com",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "&lt;eu-west-1-alb-zone-id&gt;",
+          "DNSName": "&lt;eu-west-1-alb-dns&gt;",
+          "EvaluateTargetHealth": true
+        }
+      }
+    }]
+  }'
+
+# Verify DNS propagation (TTL = 60 seconds)
+watch -n 5 'nslookup app.company.com 8.8.8.8 | grep Address'</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 6: Validation (T+12 to T+15 min)</h2>
+
+<pre><code># End-to-end health check
+curl -I https://app.company.com/health
+curl -s https://app.company.com/api/health | python -m json.tool
+
+# DB connectivity from eu-west-1
+psql -h $NEW_DB_ENDPOINT -U admin -d appdb -c "SELECT NOW(), version();"
+
+# Check error rates in eu-west-1 ALB
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/ApplicationELB \
+  --metric-name HTTPCode_Target_5XX_Count \
+  --dimensions Name=LoadBalancer,Value=&lt;eu-west-1-alb-arn-suffix&gt; \
+  --start-time $(date -u -d '5 min ago' +%FT%TZ) \
+  --end-time $(date -u +%FT%TZ) \
+  --period 60 --statistics Sum \
+  --region eu-west-1</code></pre>
+
+<p><strong>Validation checklist:</strong></p>
+<ul>
+  <li>[ ] <code>app.company.com</code> resolves to eu-west-1 ALB IP</li>
+  <li>[ ] Health endpoint returns 200 with <code>{"status": "healthy"}</code></li>
+  <li>[ ] Error rate &lt; 1% on eu-west-1 ALB for 5 consecutive minutes</li>
+  <li>[ ] No <code>FATAL</code> errors in application logs (CloudWatch Logs eu-west-1)</li>
+  <li>[ ] Aurora connections &gt; 0 in eu-west-1</li>
+  <li>[ ] Redis cache hit rate recovering (&gt; 50% after 10 min warm-up)</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Phase 7: Communication</h2>
+
+<p><strong>At T+0 (decision to failover):</strong></p>
+<ul>
+  <li>Update status page: "We are experiencing issues in our primary region. Failover in progress."</li>
+</ul>
+
+<p><strong>At T+10 (DNS cutover):</strong></p>
+<ul>
+  <li>Update status page: "Traffic routed to DR region. Service restoring."</li>
+</ul>
+
+<p><strong>At T+15 (validation complete):</strong></p>
+<ul>
+  <li>Update status page: "Service restored. Monitoring closely."</li>
+  <li>Post to #incidents: "Failover complete. us-east-1 → eu-west-1. Actual RTO: [X] min, RPO: [Y] min."</li>
+  <li>Notify customer success for enterprise accounts with SLA</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failback to us-east-1</h2>
+
+<p>After us-east-1 recovers, failback during low-traffic window:</p>
+<ol>
+  <li>Re-sync data: enable reverse replication eu-west-1 → us-east-1 Aurora</li>
+  <li>Wait for replication lag &lt; 30 seconds</li>
+  <li>Repeat failover procedure in reverse (us-east-1 becomes writer again)</li>
+  <li>Scale down eu-west-1 back to warm-standby capacity</li>
+  <li>Expected failback time: 20–30 minutes</li>
+</ol>
+
+<p><strong>Failback is lower urgency — always schedule, never emergency.</strong></p>
+
+</article>
+</body>
+</html>

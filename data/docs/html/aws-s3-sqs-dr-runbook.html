@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — AWS S3 &amp; SQS — Disaster Recovery Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+@media(max-width:640px){nav,header,article{padding-left:20px;padding-right:20px}h1{font-size:22px}h2{font-size:17px}pre{padding:14px;font-size:11px}}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>AWS S3 &amp; SQS — Disaster Recovery Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>AWS S3 &amp; SQS — Disaster Recovery Runbook</h1>
+  <p class="subtitle">Resource Types: <code>aws_s3_bucket</code> | <code>aws_sqs_queue</code> | Strategy: backup_fallback, stateless</p>
+</header>
+<article>
+
+<h2>Part 1: S3 — Cross-Region Replication &amp; Data Recovery</h2>
+
+<h3>Overview</h3>
+<p>S3 buckets (<code>aws_s3_bucket</code>) with Cross-Region Replication (CRR) replicate objects to a replica bucket in eu-west-1 with &lt; 15-minute replication lag (S3 Replication Time Control guarantees 99.99% of objects replicated within 15 minutes). S3 itself is 11 9s durability — bucket-level failure is extremely rare.</p>
+<p>RTO targets: &lt; 5 min (enable write on replica) | 30 min (restore from versioning) | 2–4 hours (restore from Glacier)<br>
+RPO: &lt; 15 min (CRR) | 0 for versioned objects (no data loss, only access delay)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Accidental Object Deletion (backup_fallback)</h2>
+
+<p><strong>Symptoms:</strong> Application returns 404 or 403 for specific S3 keys; S3 access logs show <code>DELETE</code> operations.</p>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws s3api list-object-versions \
+  --bucket app-data-primary-&lt;account-id&gt; \
+  --prefix &lt;deleted-key-prefix&gt; \
+  --query '{Versions:Versions[*].{Key:Key,Version:VersionId,Modified:LastModified},DeleteMarkers:DeleteMarkers[*].{Key:Key,Version:VersionId}}'</code></pre>
+
+<p><strong>Recovery Steps — Restore Specific Object:</strong></p>
+<ol>
+  <li>Identify delete marker:
+    <pre><code>aws s3api list-object-versions \
+  --bucket app-data-primary-&lt;account-id&gt; \
+  --prefix uploads/2026/ \
+  --query 'DeleteMarkers[*].{Key:Key,VersionId:VersionId}'</code></pre>
+  </li>
+  <li>Remove delete marker to restore object:
+    <pre><code>aws s3api delete-object \
+  --bucket app-data-primary-&lt;account-id&gt; \
+  --key &lt;object-key&gt; \
+  --version-id &lt;delete-marker-version-id&gt;</code></pre>
+  </li>
+  <li>Verify object is accessible: <code>aws s3 ls s3://app-data-primary-&lt;account-id&gt;/&lt;object-key&gt;</code></li>
+  <li>If no versioning, restore from replica bucket:
+    <pre><code>aws s3 cp s3://app-data-replica-&lt;account-id&gt;/&lt;key&gt; s3://app-data-primary-&lt;account-id&gt;/&lt;key&gt;</code></pre>
+  </li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Primary Region S3 Unavailable — Failover to Replica</h2>
+
+<p><strong>Symptoms:</strong> S3 endpoint in us-east-1 returns 503; all S3 operations fail.</p>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+  <li>Verify outage is region-wide: <code>aws health describe-events --filter services=S3,regions=us-east-1</code></li>
+  <li>Disable replication rules on replica to allow writes (otherwise replica is read-only):
+    <pre><code>aws s3api put-bucket-replication \
+  --bucket app-data-replica-&lt;account-id&gt; \
+  --replication-configuration '{"Role":"","Rules":[]}'</code></pre>
+  </li>
+  <li>Update application configuration to use replica bucket:
+    <pre><code>aws ssm put-parameter \
+  --name /app/s3_bucket \
+  --value "app-data-replica-&lt;account-id&gt;" \
+  --overwrite</code></pre>
+  </li>
+  <li>Restart application to pick up new bucket name</li>
+  <li>Monitor: new writes go to replica; prepare to re-sync when primary recovers</li>
+  <li>When primary recovers: enable reverse replication (replica → primary) to catch up</li>
+</ol>
+
+<p><strong>Post-Recovery Data Sync:</strong></p>
+<pre><code>aws s3 sync s3://app-data-replica-&lt;account-id&gt; s3://app-data-primary-&lt;account-id&gt; \
+  --source-region eu-west-1 \
+  --region us-east-1 \
+  --delete</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Bulk Accidental Deletion / Ransomware</h2>
+
+<p><strong>Recovery Steps:</strong></p>
+<ol>
+  <li>Enable S3 Object Lock on bucket immediately (prevents further deletion):
+    <pre><code>aws s3api put-object-lock-configuration \
+  --bucket app-data-primary-&lt;account-id&gt; \
+  --object-lock-configuration '{"ObjectLockEnabled":"Enabled","Rule":{"DefaultRetention":{"Mode":"GOVERNANCE","Days":30}}}'</code></pre>
+  </li>
+  <li>Identify scope of deletion from CloudTrail:
+    <pre><code>aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=DeleteObject \
+  --start-time $(date -u -d '2 hours ago' +%FT%TZ) \
+  --query 'Events[*].{Time:EventTime,User:Username,Key:Resources[0].ResourceName}'</code></pre>
+  </li>
+  <li>Restore all deleted objects by removing delete markers in bulk:
+    <pre><code>aws s3api list-object-versions \
+  --bucket app-data-primary-&lt;account-id&gt; \
+  --query 'DeleteMarkers[*].{Key:Key,VersionId:VersionId}' \
+  --output json | \
+jq -r '.[] | "aws s3api delete-object --bucket app-data-primary-&lt;account-id&gt; --key \(.Key) --version-id \(.VersionId)"' | bash</code></pre>
+  </li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>S3 Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_s3_bucket</code>:</p>
+<ul>
+  <li><code>AWS/S3/4xxErrors</code> — alert at &gt; 100/min (access errors or missing objects)</li>
+  <li><code>AWS/S3/5xxErrors</code> — alert at &gt; 10/min (S3 service errors)</li>
+  <li><code>AWS/S3/TotalRequestLatency</code> — alert at p99 &gt; 500ms</li>
+  <li>Replication lag: <code>aws s3api get-bucket-replication --bucket app-data-primary</code> + CloudWatch <code>ReplicationLatency</code></li>
+  <li>CloudTrail: alert on <code>DeleteBucket</code>, <code>DeleteObjects</code>, <code>PutBucketPolicy</code> via EventBridge rule</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Part 2: SQS — Queue Backlog &amp; Dead-Letter Recovery</h2>
+
+<h3>Overview</h3>
+<p>SQS FIFO queues (<code>aws_sqs_queue</code>) are fully managed with at-least-once delivery. <code>app-jobs.fifo</code> processes background jobs; <code>app-jobs-dlq.fifo</code> receives messages that failed processing 3 times. SQS itself has 11 9s durability; DR focuses on consumer failures and DLQ management.</p>
+<p>RTO targets: 2–5 min (restart consumers) | 30 min (redrive DLQ messages)<br>
+RPO: 0 (messages are retained for up to 14 days by default)</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Consumer Failure — Queue Depth Growing</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+  <li>CloudWatch: <code>SQS/ApproximateNumberOfMessagesNotVisible</code> growing</li>
+  <li>Application logs: worker instances failing to process jobs</li>
+  <li>DLQ <code>ApproximateNumberOfMessagesVisible</code> increasing</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws sqs get-queue-attributes \
+  --queue-url https://sqs.us-east-1.amazonaws.com/&lt;account&gt;/app-jobs.fifo \
+  --attribute-names ApproximateNumberOfMessages,ApproximateNumberOfMessagesNotVisible,ApproximateAgeOfOldestMessage
+
+aws sqs receive-message \
+  --queue-url https://sqs.us-east-1.amazonaws.com/&lt;account&gt;/app-jobs-dlq.fifo \
+  --max-number-of-messages 5 \
+  --attribute-names All</code></pre>
+
+<p><strong>Recovery Steps — stateless:</strong></p>
+<ol>
+  <li>Identify failing consumers: check EC2 instance health in ASG</li>
+  <li>If all consumers are down, increase ASG capacity temporarily:
+    <pre><code>aws autoscaling set-desired-capacity --auto-scaling-group-name app-asg --desired-capacity 5</code></pre>
+  </li>
+  <li>Fix root cause (dependency failure, code bug, configuration issue)</li>
+  <li>Deploy fix and verify consumers start processing: watch <code>MessagesVisible</code> decline</li>
+  <li>Increase <code>VisibilityTimeout</code> on main queue if messages keep re-appearing (processing too slow):
+    <pre><code>aws sqs set-queue-attributes \
+  --queue-url https://sqs.us-east-1.amazonaws.com/&lt;account&gt;/app-jobs.fifo \
+  --attributes VisibilityTimeout=600</code></pre>
+  </li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Dead-Letter Queue Redrive</h2>
+
+<p><strong>Recovery Steps — After fixing root cause:</strong></p>
+<ol>
+  <li>Inspect DLQ messages to confirm fix addresses the failure:
+    <pre><code>aws sqs receive-message \
+  --queue-url https://sqs.us-east-1.amazonaws.com/&lt;account&gt;/app-jobs-dlq.fifo \
+  --max-number-of-messages 10 --visibility-timeout 30</code></pre>
+  </li>
+  <li>Redrive DLQ messages back to main queue:
+    <pre><code>aws sqs start-message-move-task \
+  --source-arn arn:aws:sqs:us-east-1:&lt;account&gt;:app-jobs-dlq.fifo \
+  --destination-arn arn:aws:sqs:us-east-1:&lt;account&gt;:app-jobs.fifo \
+  --max-number-of-messages-per-second 5</code></pre>
+  </li>
+  <li>Monitor redrive progress:
+    <pre><code>aws sqs list-message-move-tasks \
+  --source-arn arn:aws:sqs:us-east-1:&lt;account&gt;:app-jobs-dlq.fifo</code></pre>
+  </li>
+  <li>Watch error rate after redrive — if messages fail again, they return to DLQ</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>SQS Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_sqs_queue</code>:</p>
+<ul>
+  <li><code>SQS/ApproximateNumberOfMessagesVisible</code> — alert at &gt; 1000 (backlog growing)</li>
+  <li><code>SQS/ApproximateAgeOfOldestMessage</code> — alert at &gt; 300 seconds (jobs stale)</li>
+  <li><code>SQS/NumberOfMessagesSent</code> / <code>NumberOfMessagesReceived</code> — compare to detect consumer lag</li>
+  <li>DLQ <code>ApproximateNumberOfMessagesVisible</code> — alert at &gt; 10 (jobs failing)</li>
+</ul>
+
+<p>EventBridge rule for DLQ depth:</p>
+<pre><code>aws cloudwatch put-metric-alarm \
+  --alarm-name sqs-dlq-messages-found \
+  --metric-name ApproximateNumberOfMessagesVisible \
+  --namespace AWS/SQS \
+  --statistic Maximum \
+  --period 300 \
+  --threshold 1 \
+  --comparison-operator GreaterThanOrEqualToThreshold \
+  --evaluation-periods 1 \
+  --dimensions Name=QueueName,Value=app-jobs-dlq.fifo</code></pre>
+
+</article>
+</body>
+</html>

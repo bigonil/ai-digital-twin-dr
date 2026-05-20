@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATHENA — AWS ElastiCache Redis — Disaster Recovery Runbook</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --bg:#0d0f14;--bg2:#13161e;--bg3:#1a1e2a;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e2e4ec;--text2:#8b90a4;--text3:#555b72;
+  --accent:#3b82f6;--green:#10b981;--yellow:#f59e0b;--purple:#a78bfa;--cyan:#22d3ee;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.7;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* NAV */
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--text3);position:sticky;top:0;z-index:10}
+nav a{color:var(--accent)}
+nav .sep{color:var(--border2)}
+
+/* HEADER */
+header{padding:48px 40px 36px;border-bottom:1px solid var(--border);max-width:900px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase;margin-bottom:12px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin-bottom:12px}
+.subtitle{color:var(--text2);font-size:14px;line-height:1.75}
+
+/* CONTENT */
+article{max-width:900px;margin:0 auto;padding:40px 40px 80px}
+h2{font-size:19px;font-weight:600;color:var(--text);margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:15px;font-weight:600;color:var(--cyan);margin:28px 0 12px}
+h4{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 8px;font-family:var(--mono);letter-spacing:.04em}
+p{margin-bottom:14px;color:var(--text)}
+ul,ol{margin:0 0 16px 22px}
+li{margin-bottom:6px;color:var(--text)}
+strong{color:var(--text);font-weight:600}
+em{color:var(--yellow);font-style:normal}
+
+/* CODE */
+pre{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:20px;margin:20px 0;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:3px;color:#c9d1d9}
+pre code{background:none;padding:0;border-radius:0}
+
+/* TABLES */
+.table-wrap{overflow-x:auto;margin:20px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg3);color:var(--text2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tr:hover td{background:var(--bg2)}
+
+/* BLOCKQUOTE / NOTE */
+blockquote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--bg2);border-radius:0 6px 6px 0;margin:20px 0;color:var(--text2);font-size:14px}
+
+/* MOBILE */
+@media(max-width:640px){
+  nav,header,article{padding-left:20px;padding-right:20px}
+  h1{font-size:22px}
+  h2{font-size:17px}
+  pre{padding:14px;font-size:11px}
+}
+</style>
+</head>
+<body>
+<nav><a href="index.html">← ATHENA Docs</a><span class="sep">/</span><span>AWS ElastiCache Redis — Disaster Recovery Runbook</span></nav>
+<header>
+  <div class="eyebrow">ATHENA · Disaster Recovery</div>
+  <h1>AWS ElastiCache Redis — Disaster Recovery Runbook</h1>
+  <p class="subtitle">Resource Type: <code>aws_elasticache_cluster</code> | Strategy: replica_fallback, backup_fallback. With <code>automatic_failover_enabled = true</code>, a replica is promoted to primary in 20–60 seconds when the primary fails.</p>
+</header>
+<article>
+
+<h2>Overview</h2>
+
+<p>ElastiCache Redis replication groups (<code>aws_elasticache_cluster</code>) consist of a primary node and 1–5 replicas. With <code>automatic_failover_enabled = true</code>, a replica is promoted to primary in 20–60 seconds when the primary fails. The primary endpoint DNS updates automatically; read replicas use individual endpoints.</p>
+
+<p>RTO targets: &lt; 1 min (auto-failover) | 5–10 min (manual cluster recreation)<br>
+RPO: 0 (cache is ephemeral — data loss is acceptable for cache use cases)<br>
+RPO for persistent Redis (AOF/RDB): &lt; 60 seconds</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Primary Node Failure (replica_fallback)</h2>
+
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>CloudWatch alarm: <code>ElastiCache/CacheHits</code> drops sharply</li>
+<li>Application logs: <code>ECONNREFUSED</code> or <code>READONLY</code> error from Redis client</li>
+<li>CloudWatch metric: <code>ElastiCache/ReplicationLag</code> on a specific replica spikes then drops to 0 (promotion)</li>
+</ul>
+
+<p><strong>Detection Commands:</strong></p>
+<pre><code>aws elasticache describe-replication-groups \
+  --replication-group-id app-redis \
+  --query 'ReplicationGroups[0].{Status:Status,PrimaryEndpoint:NodeGroups[0].PrimaryEndpoint}'
+
+aws elasticache describe-events \
+  --source-identifier app-redis \
+  --source-type replication-group \
+  --duration 30</code></pre>
+
+<p><strong>Recovery Steps — replica_fallback (auto):</strong></p>
+<ol>
+<li>ElastiCache detects primary failure via internal health checks (10-second intervals)</li>
+<li>Automatic failover promotes replica — takes 20–60 seconds</li>
+<li>DNS propagation to new primary completes within 60 seconds (TTL = 5s for endpoint)</li>
+<li>Verify new primary is accepting writes:
+<pre><code>redis-cli -h &lt;primary-endpoint&gt; -p 6379 SET health_check ok
+redis-cli -h &lt;primary-endpoint&gt; -p 6379 GET health_check</code></pre></li>
+<li>Check application Redis connection pool reconnects (most clients retry with backoff)</li>
+<li>Monitor <code>CacheHitRatio</code> returns to baseline (typically &gt; 80%)</li>
+</ol>
+
+<p><strong>Recovery Steps — replica_fallback (manual trigger):</strong></p>
+<pre><code>aws elasticache test-failover \
+  --replication-group-id app-redis \
+  --node-group-id 0001</code></pre>
+
+<p><strong>Verification:</strong> <code>aws elasticache describe-replication-groups</code> shows new primary node ID, <code>Status: available</code>.<br>
+<strong>Rollback:</strong> N/A — failover is one-way. Original primary rejoins as replica automatically.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Full Cluster Failure (backup_fallback)</h2>
+
+<p><strong>Recovery Steps — Recreate from Snapshot:</strong></p>
+<ol>
+<li>List available snapshots:
+<pre><code>aws elasticache describe-snapshots \
+  --replication-group-id app-redis \
+  --query 'Snapshots[*].{Name:SnapshotName,Created:SnapshotCreateTime,Status:SnapshotStatus}' \
+  --output table</code></pre></li>
+<li>Restore cluster from snapshot:
+<pre><code>aws elasticache create-replication-group \
+  --replication-group-id app-redis-restored \
+  --replication-group-description "Restored from DR snapshot" \
+  --snapshot-name &lt;snapshot-name&gt; \
+  --cache-node-type cache.r7g.large \
+  --num-node-groups 1 \
+  --replicas-per-node-group 2 \
+  --automatic-failover-enabled \
+  --security-group-ids &lt;sg-id&gt; \
+  --cache-subnet-group-name &lt;subnet-group&gt;</code></pre></li>
+<li>Update application configuration to point to new primary endpoint</li>
+<li>Warm up cache: replay recent request logs or trigger cache-warming jobs</li>
+<li>Expected RTO: 10–20 minutes from snapshot</li>
+</ol>
+
+<p><strong>Cold Start (no snapshot):</strong></p>
+<ul>
+<li>Create empty cluster (same command without <code>--snapshot-name</code>)</li>
+<li>Accept cold cache: application falls back to database for all requests temporarily</li>
+<li>Monitor <code>DatabaseConnections</code> on Aurora — expect spike during cache warm-up</li>
+<li>RTO: 5 minutes, but expect 50–70% additional DB load for 15–30 minutes while cache warms</li>
+</ul>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Failure Scenario: Replication Lag Alert</h2>
+
+<p><strong>Symptoms:</strong> <code>ElastiCache/ReplicationLag</code> &gt; 10 seconds on one or more replicas.</p>
+
+<p><strong>Investigation:</strong></p>
+<pre><code>aws cloudwatch get-metric-statistics \
+  --namespace AWS/ElastiCache \
+  --metric-name ReplicationLag \
+  --dimensions Name=ReplicationGroupId,Value=app-redis \
+  --start-time $(date -u -d '30 min ago' +%FT%TZ) \
+  --end-time $(date -u +%FT%TZ) \
+  --period 60 --statistics Maximum</code></pre>
+
+<p><strong>Recovery:</strong></p>
+<ol>
+<li>Check for write amplification on primary (high <code>CacheWrites</code> metric)</li>
+<li>Check primary node CPU — if &gt; 90%, consider scaling up: <code>aws elasticache modify-replication-group --replication-group-id app-redis --cache-node-type cache.r7g.xlarge</code></li>
+<li>If lag persists &gt; 5 minutes, isolate lagging replica: remove from read endpoint rotation</li>
+<li>Replication recovers automatically once write pressure reduces</li>
+</ol>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Monitoring &amp; Alerting</h2>
+
+<p>Key CloudWatch metrics for <code>aws_elasticache_cluster</code>:</p>
+<ul>
+<li><code>ElastiCache/ReplicationLag</code> — alert at &gt; 5 seconds (replica lagging)</li>
+<li><code>ElastiCache/CacheHitRatio</code> — alert at &lt; 70% (cache ineffective)</li>
+<li><code>ElastiCache/EngineCPUUtilization</code> — alert at &gt; 80%</li>
+<li><code>ElastiCache/FreeableMemory</code> — alert at &lt; 100 MB (evictions imminent)</li>
+<li><code>ElastiCache/Evictions</code> — alert at &gt; 1000/min (memory pressure)</li>
+<li><code>ElastiCache/CurrConnections</code> — monitor for connection exhaustion</li>
+</ul>
+
+<p>CloudWatch alarm for replica lag:</p>
+<pre><code>aws cloudwatch put-metric-alarm \
+  --alarm-name redis-replication-lag-high \
+  --metric-name ReplicationLag \
+  --namespace AWS/ElastiCache \
+  --statistic Maximum \
+  --period 60 \
+  --threshold 10 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 3 \
+  --dimensions Name=ReplicationGroupId,Value=app-redis</code></pre>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Cascading Failure Risk</h2>
+
+<p>Redis failure cascades to:</p>
+<ol>
+<li><strong>Application servers (aws_instance)</strong> — all cache misses fall through to Aurora, causing DB connection surge</li>
+<li><strong>Aurora (aws_rds_cluster)</strong> — sudden 3–10x increase in read queries may saturate DB connections or trigger CPU alarm</li>
+<li><strong>API response times</strong> — cache miss adds 50–200ms latency per request</li>
+</ol>
+
+<p>Mitigation: connection pool circuit breaker; fallback TTL-based in-memory cache at application layer; <code>READONLY</code> client detection for replica routing.</p>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:32px 0">
+
+<h2>Application-Level Redis Client Best Practices</h2>
+
+<p>For Node.js (ioredis):</p>
+<pre><code>const redis = new Redis({
+  host: process.env.REDIS_HOST,
+  retryStrategy: (times) =&gt; Math.min(times * 100, 3000),
+  maxRetriesPerRequest: 3,
+  enableReadyCheck: true,
+  lazyConnect: true,
+});</code></pre>
+
+<p>For Python (redis-py):</p>
+<pre><code>redis_client = redis.Redis(
+    host=REDIS_HOST,
+    decode_responses=True,
+    retry_on_timeout=True,
+    retry=Retry(ExponentialBackoff(), 3),
+    health_check_interval=30,
+)</code></pre>
+
+</article>
+</body>
+</html>
