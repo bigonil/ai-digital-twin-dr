@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # Anthropic Claude API
     anthropic_api_key: Optional[str] = None  # If set, Claude is used for playbook generation
     anthropic_model: str = "claude-opus-4-7"  # Model used for playbook generation
+    # Qdrant docs retrieved per playbook call — more docs = larger cached prefix = better cache hit rate.
+    # Minimum for cache activation: Opus 4.7/4.6 needs ~33 chunks; Sonnet 4.6 needs ~9 chunks.
+    qdrant_search_limit: int = 20
 
     # Observability
     otel_endpoint: Optional[str] = None  # e.g. "http://jaeger:4317" — empty disables tracing

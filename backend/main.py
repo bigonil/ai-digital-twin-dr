@@ -16,6 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from api import dr, graph, metrics, compliance, whatif, chaos, postmortem
 from api.dependencies import limiter
+from algorithms.playbook_generator import validate_cache_config
 from db.neo4j_client import Neo4jClient
 from db.qdrant_client import QdrantClient
 from db.victoriametrics_client import VictoriaMetricsClient
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
     app.state.postmortem_reports = {}
     app.state.last_compliance_report = None
 
+    validate_cache_config(settings)
     log.info("startup", msg="All databases ready.")
     yield
 

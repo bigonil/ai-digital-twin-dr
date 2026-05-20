@@ -53,6 +53,58 @@ _STATIC_STEPS_BY_STRATEGY: dict[str, list[PlaybookStep]] = {
     ],
 }
 
+# Minimum cached-prefix tokens required for each model family.
+# Below the threshold the prompt is processed normally — no error, but cache_creation_input_tokens = 0.
+_CACHE_TOKEN_MINIMUMS: dict[str, int] = {
+    "claude-opus-4-7": 4096,
+    "claude-opus-4-6": 4096,
+    "claude-opus-4-5": 4096,
+    "claude-haiku-4-5": 4096,
+    "claude-sonnet-4-6": 1024,
+    "claude-sonnet-4-5": 1024,
+}
+_QDRANT_CHUNK_CHARS = 512  # must match CHUNK_SIZE in parsers/docs.py
+
+
+def validate_cache_config(settings) -> None:
+    """
+    Log a startup warning when the prompt-caching prefix is too small to activate.
+
+    The cached prefix = system prompt + Qdrant doc context.  We estimate its size
+    conservatively from the configured Qdrant search limit and chunk size.
+    Called at startup after _SYSTEM_PROMPT is already defined in this module.
+    """
+    if not settings.anthropic_api_key:
+        return  # Claude not in use — nothing to validate
+
+    sys_chars = len(_SYSTEM_PROMPT)  # resolved at call time — defined below
+    max_doc_chars = settings.qdrant_search_limit * _QDRANT_CHUNK_CHARS
+    estimated_tokens = (sys_chars + max_doc_chars) // 4  # ~4 chars per token (English)
+
+    threshold = _CACHE_TOKEN_MINIMUMS.get(settings.anthropic_model, 4096)
+    chunks_needed = max(0, (threshold * 4 - sys_chars) // _QDRANT_CHUNK_CHARS + 1)
+
+    if estimated_tokens < threshold:
+        log.warning(
+            "anthropic_cache_below_threshold",
+            model=settings.anthropic_model,
+            estimated_cached_tokens=estimated_tokens,
+            required_tokens=threshold,
+            qdrant_search_limit=settings.qdrant_search_limit,
+            fix=(
+                f"Set QDRANT_SEARCH_LIMIT>={chunks_needed} "
+                f"or switch to claude-sonnet-4-6 (1 024-token minimum)"
+            ),
+        )
+    else:
+        log.info(
+            "anthropic_cache_config_ok",
+            model=settings.anthropic_model,
+            estimated_cached_tokens=estimated_tokens,
+            required_tokens=threshold,
+        )
+
+
 _SYSTEM_PROMPT = (
     "You are a senior SRE at a cloud-native company with deep expertise in AWS disaster recovery. "
     "You generate highly detailed, actionable runbooks grounded in the exact infrastructure context provided. "
@@ -172,7 +224,7 @@ async def _call_claude(prompt: str, doc_context: str, settings) -> str:
     if doc_context.strip():
         user_content.append({
             "type": "text",
-            "text": f"## Relevant DR Documentation (from knowledge base)\n{doc_context[:3500]}",
+            "text": f"## Relevant DR Documentation (from knowledge base)\n{doc_context}",
             "cache_control": _cache,
         })
     user_content.append({"type": "text", "text": prompt})
@@ -317,7 +369,7 @@ async def generate_playbook(
                 f"{node.get('recovery_strategy', '')} AWS region {node.get('region', '')}"
             )
             vector = await _embed(query)
-            docs = await qdrant.search(vector=vector, limit=5)
+            docs = await qdrant.search(vector=vector, limit=settings.qdrant_search_limit)
             if docs:
                 doc_context = "\n---\n".join(
                     d["payload"].get("text", "") for d in docs
