@@ -172,6 +172,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             ],
         }
 
+        # Mark origin node and blast radius as simulated_failure in Neo4j
+        await neo4j.run(
+            "MATCH (n:InfraNode {id: $id}) SET n.status = 'simulated_failure' RETURN n.id",
+            {"id": node_id},
+        )
+
+        for affected_node in affected:
+            await neo4j.run(
+                "MATCH (n:InfraNode {id: $id}) SET n.status = 'simulated_failure' RETURN n.id",
+                {"id": affected_node.id},
+            )
+
         lines = [
             f"💥 Blast radius for '{node_id}' ({len(affected)} affected nodes):\n",
             f"📊 Simulation ID: {sim_id}\n",
@@ -187,7 +199,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     if name == "get_recovery_plan":
         target = arguments["target"]
         node_rows = await neo4j.run(
-            "MATCH (n {id: $id}) RETURN n.name AS name, n.type AS type, "
+            "MATCH (n:InfraNode {id: $id}) RETURN n.name AS name, n.type AS type, "
             "n.rto_minutes AS rto, n.rpo_minutes AS rpo",
             {"id": target},
         )
