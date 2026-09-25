@@ -3,8 +3,6 @@ Phase 2 — Static code analysis.
 Scans Python / JavaScript source for cloud SDK calls and connection strings,
 links Function nodes to InfraNode resources in Neo4j.
 """
-from __future__ import annotations
-
 import ast
 import hashlib
 import re
