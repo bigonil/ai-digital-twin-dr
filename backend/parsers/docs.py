@@ -35,7 +35,7 @@ def _chunk_text(text: str) -> list[str]:
 
 def _doc_id(file_path: str, chunk_idx: int) -> str:
     raw = f"{file_path}::{chunk_idx}"
-    return str(UUID(hashlib.md5(raw.encode()).hexdigest()))
+    return str(UUID(hashlib.sha256(raw.encode()).hexdigest()[:32]))
 
 
 async def _embed(text: str) -> list[float]:
@@ -87,7 +87,7 @@ async def ingest(docs_dir: str | Path, qdrant_client, neo4j_client=None) -> dict
 
         # Optionally create a Document node in Neo4j
         if neo4j_client:
-            doc_node_id = hashlib.md5(rel_path.encode()).hexdigest()[:12]
+            doc_node_id = hashlib.sha256(rel_path.encode()).hexdigest()[:12]
             await neo4j_client.merge_node(
                 {
                     "id": doc_node_id,

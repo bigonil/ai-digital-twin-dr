@@ -47,11 +47,11 @@ BOTO3_SERVICE_MAP = {
 
 def _func_id(file_path: str, func_name: str) -> str:
     raw = f"{file_path}::{func_name}"
-    return "fn_" + hashlib.md5(raw.encode()).hexdigest()[:10]
+    return "fn_" + hashlib.sha256(raw.encode()).hexdigest()[:10]
 
 
 def _resource_id_from_name(resource_name: str) -> str:
-    return "ref_" + hashlib.md5(resource_name.encode()).hexdigest()[:10]
+    return "ref_" + hashlib.sha256(resource_name.encode()).hexdigest()[:10]
 
 
 def _scan_python_file(file_path: Path, base: Path) -> tuple[list[InfraNode], list[InfraEdge]]:

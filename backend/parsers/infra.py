@@ -31,7 +31,7 @@ REDUNDANCY_TYPES = {
 
 def _node_id(resource_type: str, resource_name: str) -> str:
     raw = f"{resource_type}.{resource_name}"
-    return hashlib.md5(raw.encode()).hexdigest()[:12] + f"_{resource_name}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:12] + f"_{resource_name}"
 
 
 def _detect_provider(resource_type: str) -> CloudProvider:
